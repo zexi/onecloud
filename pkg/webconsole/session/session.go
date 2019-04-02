@@ -82,7 +82,7 @@ func (man *SSessionManager) Get(accessToken string) (*SSession, bool) {
 		return nil, false
 	}
 	s := obj.(*SSession)
-	if time.Since(s.AccessedAt) < AccessInterval {
+	if s.GetProtocol() != SPICE && time.Since(s.AccessedAt) < AccessInterval {
 		log.Warningf("Token: %s, Session: %s can't be accessed during %s, last accessed at: %s", accessToken, s.Id, AccessInterval, s.AccessedAt)
 		return nil, false
 	}
