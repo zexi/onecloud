@@ -806,3 +806,5 @@ yunion.io/x/sqlchemy v0.0.0-20190624021043-a2ed237bb1f7 h1:mGfap/bAn7ghA6w6cBxzT
 yunion.io/x/sqlchemy v0.0.0-20190624021043-a2ed237bb1f7/go.mod h1:FTdwPdGhMgh4E+UFXc9klI1Ok34fMuybTT+jLhOaIjI=
 yunion.io/x/structarg v0.0.0-20190625060951-21ab6c037d98 h1:4++t87El6OToeSLqE6K0uxCbGgk0k/7tuqvPcGiIAN0=
 yunion.io/x/structarg v0.0.0-20190625060951-21ab6c037d98/go.mod h1:EP6NSv2C0zzqBDTKumv8hPWLb3XvgMZDHQRfyuOrQng=
+yunion.io/x/structarg v0.0.0-20190625074850-3c0636a9fffe h1:Wr2EXv72ynwtW+x0VCqWwpsfUBWecaZWnLMgaP3UiTo=
+yunion.io/x/structarg v0.0.0-20190625074850-3c0636a9fffe/go.mod h1:EP6NSv2C0zzqBDTKumv8hPWLb3XvgMZDHQRfyuOrQng=

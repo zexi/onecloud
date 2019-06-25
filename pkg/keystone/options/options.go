@@ -30,7 +30,7 @@ type SKeystoneOptions struct {
 	SetupCredentialKeys    bool   `help:"setup standalone fernet keys for credentials" token:"setup_credential_key" default:"false"`
 	// SetupStateKey          bool   `help:"setup standalone fernet keys for openid state" token:"setup_state_key"`
 
-	BootstrapAdminUserPassword string `help:"bootstreap sysadmin user password" default:"sysadmin"`
+	BootstrapAdminUserPassword string `help:"bootstreap sysadmin user password"`
 
 	AutoSyncIntervalSeconds int `help:"frequency to check auto sync tasks" default:"30"`
 

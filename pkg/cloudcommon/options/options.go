@@ -67,7 +67,7 @@ type BaseOptions struct {
 
 	CalculateQuotaUsageIntervalSeconds int `help:"interval to calculate quota usages, default 5 minutes" default:"300"`
 
-	structarg.BaseOptions
+	structarg.BaseOptions `json:"-"`
 }
 
 type CommonOptions struct {

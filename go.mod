@@ -47,7 +47,6 @@ require (
 	github.com/go-ole/go-ole v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
-	github.com/gogo/protobuf v1.2.1
 	github.com/golang-plus/errors v1.0.0
 	github.com/golang-plus/testing v1.0.0 // indirect
 	github.com/golang-plus/uuid v1.0.0
@@ -113,8 +112,7 @@ require (
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/ldap.v3 v3.0.3
 	gopkg.in/yaml.v2 v2.2.2
-	istio.io/api v0.0.0-20190604023128-6f137ab2ce6d
-	istio.io/istio v0.0.0-20190617150826-32b1b8a6a88f
+	istio.io/istio v0.0.0-20190617150826-32b1b8a6a88f // indirect
 	k8s.io/api v0.0.0-20190222213804-5cb15d344471
 	k8s.io/apimachinery v0.0.0-20190221213512-86fb29eff628
 	k8s.io/client-go v10.0.0+incompatible
@@ -123,5 +121,5 @@ require (
 	yunion.io/x/log v0.0.0-20190514041436-04ce53b17c6b
 	yunion.io/x/pkg v0.0.0-20190620104149-945c25821dbf
 	yunion.io/x/sqlchemy v0.0.0-20190624021043-a2ed237bb1f7
-	yunion.io/x/structarg v0.0.0-20190625060951-21ab6c037d98
+	yunion.io/x/structarg v0.0.0-20190625074850-3c0636a9fffe
 )
