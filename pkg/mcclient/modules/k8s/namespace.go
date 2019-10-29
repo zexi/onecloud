@@ -18,11 +18,23 @@ import (
 	"yunion.io/x/onecloud/pkg/mcclient/modules"
 )
 
-var Namespaces *NamespaceManager
+var (
+	Namespaces     *NamespaceManager
+	LimitRanges    *LimitRangeManager
+	ResourceQuotas *ResourceQuotaManager
+)
 
 type NamespaceManager struct {
 	*MetaResourceManager
 	statusGetter
+}
+
+type LimitRangeManager struct {
+	*NamespaceResourceManager
+}
+
+type ResourceQuotaManager struct {
+	*NamespaceResourceManager
 }
 
 func init() {
@@ -31,5 +43,21 @@ func init() {
 		statusGetter:        getStatus,
 	}
 
+	LimitRanges = &LimitRangeManager{
+		NamespaceResourceManager: NewNamespaceResourceManager(
+			"limitrange", "limitranges",
+			NewColumns(), NewColumns(),
+		),
+	}
+
+	ResourceQuotas = &ResourceQuotaManager{
+		NamespaceResourceManager: NewNamespaceResourceManager(
+			"resourcequota", "resourcequotas",
+			NewColumns(), NewColumns(),
+		),
+	}
+
 	modules.Register(Namespaces)
+	modules.Register(LimitRanges)
+	modules.Register(ResourceQuotas)
 }

@@ -20,4 +20,6 @@ import (
 
 func initNamespace() {
 	initK8sClusterResource("namespace", k8s.Namespaces)
+	initK8sNamespaceResource("limitrange", k8s.LimitRanges)
+	initK8sNamespaceResource("resourcequota", k8s.ResourceQuotas)
 }
