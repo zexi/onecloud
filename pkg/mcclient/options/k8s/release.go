@@ -15,7 +15,9 @@
 package k8s
 
 import (
+	"fmt"
 	"io/ioutil"
+	"strings"
 
 	"yunion.io/x/jsonutils"
 )
@@ -126,7 +128,12 @@ func (o ReleaseUpgradeOptions) Params() (*jsonutils.JSONDict, error) {
 		return nil, err
 	}
 	params.Update(o.NamespaceWithClusterOptions.Params())
-	params.Add(jsonutils.NewString(o.CHARTNAME), "chart_name")
+	parts := strings.Split(o.CHARTNAME, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid chart format %q", o.CHARTNAME)
+	}
+	params.Add(jsonutils.NewString(parts[0]), "repo")
+	params.Add(jsonutils.NewString(parts[1]), "chart_name")
 	params.Add(jsonutils.NewString(o.NAME), "release_name")
 	if o.ReuseValues {
 		params.Add(jsonutils.JSONTrue, "reuse_values")
