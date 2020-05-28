@@ -15,6 +15,8 @@
 package guest
 
 import (
+	"fmt"
+
 	"yunion.io/x/pkg/utils"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
@@ -63,6 +65,10 @@ func (p *StatusPredicate) Execute(u *core.Unit, c core.Candidater) (bool, []core
 	}
 
 	zone := getter.Zone()
+	if zone == nil {
+		h.Exclude(fmt.Sprintf("host %s zone is nil", getter.Id()))
+		return h.GetResult()
+	}
 	if zone.Status != ExpectedEnableStatus {
 		h.Exclude2("zone_status", zone.Status, ExpectedEnableStatus)
 	}
