@@ -15,7 +15,7 @@
 package models
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -27,7 +27,7 @@ import (
 	"yunion.io/x/log"
 
 	schedapi "yunion.io/x/onecloud/pkg/apis/scheduler"
-	"yunion.io/x/onecloud/pkg/cloudcommon/db/lockman"
+	//"yunion.io/x/onecloud/pkg/cloudcommon/db/lockman"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/quotas"
 	computemodels "yunion.io/x/onecloud/pkg/compute/models"
 	"yunion.io/x/onecloud/pkg/scheduler/api"
@@ -37,12 +37,17 @@ var HostPendingUsageManager *SHostPendingUsageManager
 
 type SHostPendingUsageManager struct {
 	store *SHostMemoryPendingUsageStore
+	// locker sync.Locker
+	locker *sync.RWMutex
 }
 
 func init() {
 	pendingStore := NewHostMemoryPendingUsageStore()
 
-	HostPendingUsageManager = &SHostPendingUsageManager{pendingStore}
+	HostPendingUsageManager = &SHostPendingUsageManager{
+		store:  pendingStore,
+		locker: new(sync.RWMutex),
+	}
 }
 
 func (m *SHostPendingUsageManager) Keyword() string {
@@ -50,7 +55,7 @@ func (m *SHostPendingUsageManager) Keyword() string {
 }
 
 func (m *SHostPendingUsageManager) newSessionUsage(req *api.SchedInfo, hostId string) *SessionPendingUsage {
-	su := NewSessionUsage(req.SessionId)
+	su := NewSessionUsage(req.SessionId, hostId)
 	su.Usage = NewPendingUsageBySchedInfo(hostId, req)
 	return su
 }
@@ -60,11 +65,17 @@ func (m *SHostPendingUsageManager) newPendingUsage(hostId string) *SPendingUsage
 }
 
 func (m *SHostPendingUsageManager) GetPendingUsage(hostId string) (*SPendingUsage, error) {
+	m.locker.RLock()
+	defer m.locker.RUnlock()
+
+	return m.getPendingUsage(hostId)
+}
+
+func (m *SHostPendingUsageManager) getPendingUsage(hostId string) (*SPendingUsage, error) {
 	pending, err := m.store.GetPendingUsage(hostId)
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("Get host %s pending usage: %s", hostId, jsonutils.Marshal(pending.ToMap()).PrettyString())
 	return pending, nil
 }
 
@@ -72,11 +83,14 @@ func (m *SHostPendingUsageManager) GetSessionUsage(sessionId, hostId string) (*S
 	return m.store.GetSessionUsage(sessionId, hostId)
 }
 
-func (m *SHostPendingUsageManager) SetPendingUsage(req *api.SchedInfo, candidate *schedapi.CandidateResource) {
+func (m *SHostPendingUsageManager) AddPendingUsage(req *api.SchedInfo, candidate *schedapi.CandidateResource) {
 	hostId := candidate.HostId
-	ctx := context.Background()
-	lockman.LockClass(ctx, m, hostId)
-	defer lockman.ReleaseClass(ctx, m, hostId)
+	//ctx := context.Background()
+	//lockman.LockClass(ctx, m, hostId)
+	//defer lockman.ReleaseClass(ctx, m, hostId)
+	// TODO: fix this, will be deadlock if backup_candidate is not nil
+	//m.locker.Lock()
+	//defer m.locker.Unlock()
 
 	sessionUsage, _ := m.GetSessionUsage(req.SessionId, hostId)
 	if sessionUsage == nil {
@@ -85,12 +99,16 @@ func (m *SHostPendingUsageManager) SetPendingUsage(req *api.SchedInfo, candidate
 	}
 	m.addSessionUsage(candidate.HostId, sessionUsage)
 	if candidate.BackupCandidate != nil {
-		m.SetPendingUsage(req, candidate.BackupCandidate)
+		m.AddPendingUsage(req, candidate.BackupCandidate)
 	}
 }
 
+// addSessionUsage add pending usage and session usage
 func (m *SHostPendingUsageManager) addSessionUsage(hostId string, usage *SessionPendingUsage) {
-	pendingUsage, _ := m.GetPendingUsage(hostId)
+	m.locker.Lock()
+	defer m.locker.Unlock()
+
+	pendingUsage, _ := m.getPendingUsage(hostId)
 	if pendingUsage == nil {
 		pendingUsage = m.newPendingUsage(hostId)
 	}
@@ -101,21 +119,23 @@ func (m *SHostPendingUsageManager) addSessionUsage(hostId string, usage *Session
 }
 
 func (m *SHostPendingUsageManager) CancelPendingUsage(hostId string, su *SessionPendingUsage) error {
-	ctx := context.Background()
-	lockman.LockClass(ctx, m, hostId)
-	defer lockman.ReleaseClass(ctx, m, hostId)
+	//ctx := context.Background()
+	//lockman.LockClass(ctx, m, hostId)
+	//defer lockman.ReleaseClass(ctx, m, hostId)
+	m.locker.Lock()
+	defer m.locker.Unlock()
 
-	pendingUsage, _ := m.GetPendingUsage(hostId)
+	pendingUsage, _ := m.getPendingUsage(hostId)
 	if pendingUsage == nil {
 		return nil
 	}
 	if su == nil {
 		return nil
 	}
-	log.Debugf("Cancel pendingUsage %#v - %#v", pendingUsage.ToMap(), su.Usage.ToMap())
 	pendingUsage.Sub(su.Usage)
 	m.store.SetPendingUsage(hostId, pendingUsage)
 	su.SubCount()
+	log.Errorf("Cancelled pendingUsage %#v", pendingUsage.ToMap())
 	return nil
 }
 
@@ -165,6 +185,7 @@ func (self *SHostMemoryPendingUsageStore) SetPendingUsage(hostId string, usage *
 		self.store.Delete(hostId)
 		return
 	}
+	log.Infof("set host %s pending usage: %s", hostId, jsonutils.Marshal(usage.ToMap()).PrettyString())
 	self.store.Store(hostId, usage)
 }
 
@@ -173,6 +194,7 @@ func (self *SHostMemoryPendingUsageStore) DeleteSessionUsage(usage *SessionPendi
 }
 
 type SessionPendingUsage struct {
+	HostId    string
 	SessionId string
 	Usage     *SPendingUsage
 	countLock *sync.Mutex
@@ -180,15 +202,20 @@ type SessionPendingUsage struct {
 	cancelCh  chan string
 }
 
-func NewSessionUsage(sid string) *SessionPendingUsage {
+func NewSessionUsage(sid, hostId string) *SessionPendingUsage {
 	su := &SessionPendingUsage{
+		HostId:    hostId,
 		SessionId: sid,
-		Usage:     NewPendingUsageBySchedInfo("", nil),
+		Usage:     NewPendingUsageBySchedInfo(hostId, nil),
 		count:     0,
 		countLock: new(sync.Mutex),
 		cancelCh:  make(chan string),
 	}
 	return su
+}
+
+func (su *SessionPendingUsage) GetHostId() string {
+	return su.Usage.HostId
 }
 
 func (su *SessionPendingUsage) AddCount() {
@@ -328,7 +355,7 @@ func NewPendingUsageBySchedInfo(hostId string, req *api.SchedInfo) *SPendingUsag
 		// but in the future, info may increase
 		group := &computemodels.SGroup{}
 		group.Id = groupId
-		u.InstanceGroupUsage[groupId] = &api.CandidateGroup{group, 1}
+		u.InstanceGroupUsage[groupId] = &api.CandidateGroup{SGroup: group, ReferCount: 1}
 	}
 
 	return u

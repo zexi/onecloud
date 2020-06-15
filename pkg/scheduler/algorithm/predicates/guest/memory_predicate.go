@@ -15,6 +15,8 @@
 package guest
 
 import (
+	"yunion.io/x/log"
+
 	"yunion.io/x/onecloud/pkg/scheduler/algorithm/predicates"
 	"yunion.io/x/onecloud/pkg/scheduler/core"
 )
@@ -61,6 +63,7 @@ func (p *MemoryPredicate) Execute(u *core.Unit, c core.Candidater) (bool, []core
 		h.AppendInsufficientResourceError(reqMemSize, totalMemSize, freeMemSize)
 	}
 
+	log.Errorf("===%s freeMemSize %d, reqMemSize %d", d.SessionId, freeMemSize, reqMemSize)
 	h.SetCapacity(freeMemSize / reqMemSize)
 	return h.GetResult()
 }

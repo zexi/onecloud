@@ -391,6 +391,7 @@ func (h *HostDesc) GetTotalMemSize(useRsvd bool) int64 {
 }
 
 func (h *HostDesc) GetFreeMemSize(useRsvd bool) int64 {
+	log.Errorf("host db %q freeMemSize: %d, reservedfree: %d, pending: %d", h.Name, h.FreeMemSize, h.GuestReservedMemSizeFree(), h.GetPendingUsage().Memory)
 	return reservedResourceAddCal(h.FreeMemSize, h.GuestReservedMemSizeFree(), useRsvd) - int64(h.GetPendingUsage().Memory)
 }
 
@@ -965,6 +966,8 @@ func (b *HostBuilder) fillGuestsResourceInfo(desc *HostDesc, host *computemodels
 		} else if IsGuestPendingDelete(guest) {
 			memFakeDeletedSize += int64(guest.VmemSize)
 			cpuFakeDeletedCount += int64(guest.VcpuCount)
+		} else {
+			log.Errorf("---guest exclude %s, status %s", guest.Name, guest.Status)
 		}
 		guestCount++
 		cpuReqCount += int64(guest.VcpuCount)
