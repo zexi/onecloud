@@ -24,8 +24,10 @@ type FedJointClusterBaseListOptions struct {
 	options.BaseListOptions
 	FederatedResourceId string `help:"ID or Name of federated resource" json:"federatedresource_id"`
 	ClusterId           string `help:"ID or Name of cluster"`
+	ClusterName         string `help:"Name of cluster(fuzzy match)"`
 	NamespaceId         string `help:"ID or Name of namespace"`
 	ResourceId          string `help:"ID or Name of resource"`
+	ResourceName        string `help:"Name of resource(fuzzy match)"`
 }
 
 func (o *FedJointClusterBaseListOptions) GetMasterOpt() string {
