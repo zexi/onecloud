@@ -237,6 +237,10 @@ type SAwsProvider struct {
 	client *aws.SAwsClient
 }
 
+func (self *SAwsProvider) GetClient() *aws.SAwsClient {
+	return self.client
+}
+
 func (self *SAwsProvider) GetSubAccounts() ([]cloudprovider.SSubAccount, error) {
 	return self.client.GetSubAccounts()
 }

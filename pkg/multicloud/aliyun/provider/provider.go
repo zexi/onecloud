@@ -248,6 +248,10 @@ type SAliyunProvider struct {
 	client *aliyun.SAliyunClient
 }
 
+func (self *SAliyunProvider) GetClient() *aliyun.SAliyunClient {
+	return self.client
+}
+
 func (self *SAliyunProvider) GetSysInfo() (jsonutils.JSONObject, error) {
 	regions := self.client.GetIRegions()
 	info := jsonutils.NewDict()
