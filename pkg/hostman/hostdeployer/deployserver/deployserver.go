@@ -128,7 +128,7 @@ func (*DeployerServer) ResizeFs(ctx context.Context, req *deployapi.ResizeFsPara
 		if err := unmount(root); err != nil {
 			return new(deployapi.Empty), err
 		}
-		return new(deployapi.Empty), errors.ErrNotSupported
+		return new(deployapi.Empty), errors.Wrapf(errors.ErrNotSupported, "Resize fs for %s", root.GetOs())
 	}
 
 	// must umount rootfs before resize partition
