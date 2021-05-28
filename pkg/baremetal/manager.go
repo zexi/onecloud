@@ -1405,7 +1405,7 @@ func (b *SBaremetalInstance) DoRedfishPowerOn() error {
 	if redfishApi != nil {
 		err := redfishApi.Reset(ctx, "On")
 		if err != nil {
-			if httputils.ErrorCode(err) == 409 {
+			if httputils.ErrorCode(err) == 409 || strings.Contains(err.Error(), "409") {
 				log.Warningf("redfishApi.Reset On fail %s", err)
 			} else {
 				return errors.Wrap(err, "redfishApi.Reset On")
