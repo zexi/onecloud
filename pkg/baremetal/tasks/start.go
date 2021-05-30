@@ -51,9 +51,13 @@ func (self *SBaremetalServerStartTask) DoBoot(ctx context.Context, args interfac
 			return errors.Wrap(err, "DoPXEBoot")
 		}
 	} else {
-		err := self.Baremetal.DoRedfishPowerOn()
-		if err != nil {
-			return errors.Wrap(err, "DoRedfishPowerOn")
+		var errs []error
+		if err := self.Baremetal.DoRedfishPowerOn(); err != nil {
+			errs = append(errs, errors.Wrap(err, "DoRedfishPowerOn"))
+			if err := self.Baremetal.DoPXEBoot(); err != nil {
+				errs = append(errs, errors.Wrap(err, "Try DoPXEBoot after DoRedfishPowerOn"))
+				return errors.NewAggregate(errs)
+			}
 		}
 	}
 	self.SetStage(self.WaitForStart)
