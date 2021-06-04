@@ -57,8 +57,11 @@ func isDiskConfigStorageMatch(
 	rangeIsNoneAndSmallThanCount := len(config.Range) == 0 && int64(len(selected)) < config.Count
 	adapterIsEqual := (confAdapter == nil || *confAdapter == adapter) &&
 		(confDriver == nil || *confDriver == driver)
+	if confDriver != nil {
+		log.Errorf("===confDriver: %#v", *confDriver)
+	}
 
-	log.V(10).Debugf("typeIsHybrid: %v, typeIsRotate: %v, typeIsSSD: %v, rangeIsNoneAndCountZero: %v, rangeIsNotNoneAndIndexInRange: %v, rangeIsNoneAndSmallThanCount: %v, adapterIsEqual: %v", typeIsHybrid, typeIsRotate, typeIsSSD, rangeIsNoneAndCountZero, rangeIsNotNoneAndIndexInRange, rangeIsNoneAndSmallThanCount, adapterIsEqual)
+	log.Debugf("Try storage: %#v, typeIsHybrid: %v, typeIsRotate: %v, typeIsSSD: %v, rangeIsNoneAndCountZero: %v, rangeIsNotNoneAndIndexInRange: %v, rangeIsNoneAndSmallThanCount: %v, adapterIsEqual: %v", *storage, typeIsHybrid, typeIsRotate, typeIsSSD, rangeIsNoneAndCountZero, rangeIsNotNoneAndIndexInRange, rangeIsNoneAndSmallThanCount, adapterIsEqual)
 
 	if (typeIsHybrid || typeIsRotate || typeIsSSD) &&
 		(rangeIsNoneAndCountZero || rangeIsNotNoneAndIndexInRange || rangeIsNoneAndSmallThanCount) &&
@@ -109,7 +112,11 @@ func RetrieveStorages(diskConfig *api.BaremetalDiskConfig, storages []*Baremetal
 		} else {
 			rest = append(rest, storage)
 		}
-		idx++
+		if confDriver == nil {
+			idx++
+		} else if *confDriver == storage.Driver {
+			idx++
+		}
 	}
 	return
 }
@@ -335,8 +342,8 @@ func CalculateLayout(confs []*api.BaremetalDiskConfig, storages []*BaremetalStor
 			noneConf, _ := ParseDiskConfig(DISK_CONF_NONE)
 			conf = &noneConf
 		}
-		selected, storage1 := RetrieveStorages(conf, storages)
-		storages = storage1
+		selected, restStorges := RetrieveStorages(conf, storages)
+		storages = restStorges
 		if len(selected) == 0 {
 			err = fmt.Errorf("Not found matched storages by config: %#v", conf)
 			return

@@ -363,7 +363,7 @@ func (task *sBaremetalPrepareTask) findAdminNic(cli *ssh.Client, nicsInfo []*typ
 
 func (task *sBaremetalPrepareTask) updateBmInfo(cli *ssh.Client, i *baremetalPrepareInfo) error {
 	adminNic := task.baremetal.GetAdminNic()
-	if adminNic == nil {
+	if adminNic == nil || (adminNic != nil && !adminNic.LinkUp) {
 		adminIdx, adminNicDev, err := task.findAdminNic(cli, i.nicsInfo)
 		if err != nil {
 			return errors.Wrap(err, "task.findAdminNic")
@@ -373,7 +373,7 @@ func (task *sBaremetalPrepareTask) updateBmInfo(cli *ssh.Client, i *baremetalPre
 		if err != nil {
 			return errors.Wrap(err, "send Admin Nic Info")
 		}
-		adminNic = task.baremetal.GetAdminNic()
+		adminNic = task.baremetal.GetNicByMac(adminNicDev.Mac)
 	}
 	// collect params
 	updateInfo := make(map[string]interface{})
@@ -446,6 +446,7 @@ func (task *sBaremetalPrepareTask) updateBmInfo(cli *ssh.Client, i *baremetalPre
 	if o.Options.EnablePxeBoot && task.baremetal.EnablePxeBoot() {
 		for _, nicInfo := range i.nicsInfo {
 			if nicInfo.Mac.String() != adminNic.GetMac().String() && nicInfo.Up != nil && *nicInfo.Up {
+				log.Errorf("==========doNicWireProbe: %#v, adminNic: %#v", *nicInfo, adminNic)
 				err = task.doNicWireProbe(cli, nicInfo)
 				if err != nil {
 					// ignore the error
@@ -839,7 +840,7 @@ func (task *sBaremetalPrepareTask) doNicWireProbe(cli *ssh.Client, nic *types.SN
 	maxTries := 6
 	for tried := 0; tried < maxTries; tried++ {
 		log.Infof("doNicWireProbe %v", nic)
-		_, err := cli.Run(fmt.Sprintf("/sbin/udhcpc -t 1 -T 3 -n -i %s", nic.Dev))
+		_, err := cli.Run(fmt.Sprintf("/sbin/udhcpc -t 3 -T 1 -n -i %s", nic.Dev))
 		if err != nil {
 			log.Errorf("/sbin/udhcpc error: %v", err)
 		}
