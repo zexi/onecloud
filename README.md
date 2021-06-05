@@ -6,6 +6,10 @@
 
 [English](./README.md) | [简体中文](./README-CN.md)
 
+![cloudpods](https://docs.yunion.io/images/cloudpods_logo_green.png)
+![cloudpods](https://docs.yunion.io/images/cloudpods_logo_green.png | height=100)
+<img src="https://docs.yunion.io/images/cloudpods_logo_green.png" alt="cloudpods" height="100" >
+
 ## What is Yunion Cloud?
 
 Yunion Cloud is an open source unified-IaaS cloud platform.
