@@ -793,6 +793,11 @@ func init() {
 			return err
 		}
 
+		eip, err := srv.GetString("eip")
+		if err != nil && err.Error() != "Get: key not found" {
+			return err
+		}
+
 		address := make([]string, 0)
 		nics, err := srv.GetArray("nics")
 		if err != nil {
@@ -834,7 +839,6 @@ func init() {
 		if opts.User != "" {
 			user = opts.User
 		}
-
 		host := address[0]
 		if opts.Host != "" {
 			host = opts.Host
@@ -844,24 +848,32 @@ func init() {
 			port = opts.Port
 		}
 
-		vpcid, err := srv.GetString("vpc_id")
-		if err != nil {
-			return err
-		}
-
 		forwardFlag := false
 		var (
 			forwardItem *forwardInfo
 			sshCli      *ssh.Client
+			vpcid       string
 		)
 
-		if vpcid == "default" {
+		vpcid, err = srv.GetString("vpc_id")
+		if err != nil {
+			return err
+		}
+
+		sshCli, err = ssh.NewClient(host, port, user, passwd, "")
+		if err != nil && eip != "" {
+			host = eip
 			sshCli, err = ssh.NewClient(host, port, user, passwd, "")
-			if err != nil {
-				return err
+			if err != nil && vpcid != "default" {
+				forwardFlag = true
 			}
 		} else {
-			forwardFlag = true
+			if vpcid != "default" {
+				forwardFlag = true
+			}
+		}
+
+		if forwardFlag {
 			forwardItem, err = openForward(s, srvid)
 			if err != nil {
 				return err
