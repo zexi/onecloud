@@ -489,3 +489,8 @@ func (m *HmpMonitor) NetdevDel(id string, callback StringCallback) {
 	cmd := fmt.Sprintf("netdev_del %s", id)
 	m.Query(cmd, callback)
 }
+
+func (m *HmpMonitor) QOMList(path string, callback StringCallback) {
+	cmd := fmt.Sprintf("qom-list %s", path)
+	m.Query(cmd, callback)
+}

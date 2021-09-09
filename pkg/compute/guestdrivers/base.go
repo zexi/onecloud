@@ -423,3 +423,11 @@ func (self *SBaseGuestDriver) ValidateRebuildRoot(ctx context.Context, userCred 
 func (self *SBaseGuestDriver) ValidateDetachNetwork(ctx context.Context, userCred mcclient.TokenCredential, guest *models.SGuest) error {
 	return nil
 }
+
+func (self *SBaseGuestDriver) RequestAttachIsolatedDevice(ctx context.Context, guest *models.SGuest, userCred mcclient.TokenCredential, data *jsonutils.JSONDict, task taskman.ITask) error {
+	return errors.ErrNotImplemented
+}
+
+func (self *SBaseGuestDriver) RequestDetachIsolatedDevice(ctx context.Context, guest *models.SGuest, userCred mcclient.TokenCredential, data *jsonutils.JSONDict, task taskman.ITask) error {
+	return errors.ErrNotImplemented
+}

@@ -775,3 +775,30 @@ func (self *SKVMGuestDriver) ValidateDetachNetwork(ctx context.Context, userCred
 	}
 	return nil
 }
+
+/*
+ * func (self *SKVMGuestDriver) RequestAttachIsolatedDevice(ctx context.Context, guest *models.SGuest, userCred mcclient.TokenCredential, task taskman.ITask, params interface{}) error {
+ * 	host, err := guest.GetHost()
+ * 	if err != nil {
+ * 		return errors.Wrap(err, "get guest host")
+ * 	}
+ * 	url := fmt.Sprintf("%s/servers/%s/add-device", host.ManagerUri, guest.Id)
+ * 	if _, _, err := httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "POST", url, task.GetTaskRequestHeader(), body, false); err != nil {
+ * 		return errors.Wrapf(err, "request to host %s", url)
+ * 	}
+ * 	return nil
+ * }
+ */
+
+func (self *SKVMGuestDriver) RequestDetachIsolatedDevice(ctx context.Context, guest *models.SGuest, userCred mcclient.TokenCredential, data *jsonutils.JSONDict, task taskman.ITask) error {
+	host, err := guest.GetHost()
+	if err != nil {
+		return errors.Wrap(err, "get guest host")
+	}
+	url := fmt.Sprintf("%s/servers/%s/hostplug-del-device", host.ManagerUri, guest.GetId())
+	body := jsonutils.Marshal(&host_api.GuestHotPlugDelDeviceRequst{})
+	if _, _, err := httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "POST", url, task.GetTaskRequestHeader(), body, false); err != nil {
+		return errors.Wrapf(err, "request to host %s", url)
+	}
+	return nil
+}

@@ -1839,7 +1839,7 @@ func (self *SGuest) AllowPerformDetachIsolatedDevice(ctx context.Context, userCr
 	return self.IsOwner(userCred) || db.IsAdminAllowPerform(userCred, self, "detach-isolated-device")
 }
 
-func (self *SGuest) PerformDetachIsolatedDevice(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, data jsonutils.JSONObject) (jsonutils.JSONObject, error) {
+func (self *SGuest) PerformDetachIsolatedDevice(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, input *api.GuestDetachIsolatedDeviceInput) (jsonutils.JSONObject, error) {
 	if self.Hypervisor != api.HYPERVISOR_KVM {
 		return nil, httperrors.NewNotAcceptableError("Not allow for hypervisor %s", self.Hypervisor)
 	}
@@ -1848,16 +1848,15 @@ func (self *SGuest) PerformDetachIsolatedDevice(ctx context.Context, userCred mc
 		logclient.AddActionLogWithContext(ctx, self, logclient.ACT_GUEST_DETACH_ISOLATED_DEVICE, msg, userCred, false)
 		return nil, httperrors.NewInvalidStatusError(msg)
 	}
-	var detachAllDevice = jsonutils.QueryBoolean(data, "detach_all", false)
+	var detachAllDevice = input.DetachAll
 	if !detachAllDevice {
-		device, err := data.GetString("device")
-		if err != nil {
+		device := input.DeviceId
+		if device == "" {
 			msg := "Missing isolated device"
 			logclient.AddActionLogWithContext(ctx, self, logclient.ACT_GUEST_DETACH_ISOLATED_DEVICE, msg, userCred, false)
 			return nil, httperrors.NewBadRequestError(msg)
 		}
-		err = self.startDetachIsolateDevice(ctx, userCred, device)
-		if err != nil {
+		if err := self.startDetachIsolateDevice(ctx, userCred, device); err != nil {
 			return nil, err
 		}
 	} else {
@@ -1872,8 +1871,8 @@ func (self *SGuest) PerformDetachIsolatedDevice(ctx context.Context, userCred mc
 			}
 		}
 	}
-	if jsonutils.QueryBoolean(data, "auto_start", false) {
-		return self.PerformStart(ctx, userCred, query, data)
+	if input.AutoStart {
+		return self.PerformStart(ctx, userCred, query, jsonutils.Marshal(input))
 	}
 	return nil, nil
 }

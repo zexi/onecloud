@@ -845,3 +845,8 @@ func (m *QmpMonitor) NetdevDel(id string, callback StringCallback) {
 	cmd := fmt.Sprintf("netdev_del %s", id)
 	m.HumanMonitorCommand(cmd, callback)
 }
+
+func (m *QmpMonitor) QOMList(path string, callback StringCallback) {
+	cmd := fmt.Sprintf("qom-list %s", path)
+	m.HumanMonitorCommand(cmd, callback)
+}

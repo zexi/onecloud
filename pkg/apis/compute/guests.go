@@ -688,3 +688,14 @@ type GuestJsonDesc struct {
 		InstanceId         string `json:"instance_id"`
 	} `json:"instance_snapshot_info"`
 }
+
+type GuestDetachIsolatedDeviceInput struct {
+	// swagger: ignore
+	Device string `json:"device" yunion-deprecated-by:"device_id"`
+	// 设备Id
+	DeviceId string `json:"device_id"`
+	// 卸载所有设备
+	DetachAll bool `json:"detach_all"`
+	// 卸载完后自动启动
+	AutoStart bool `json:"auto_start"`
+}

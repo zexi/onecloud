@@ -76,6 +76,8 @@ type Monitor interface {
 
 	NetdevAdd(id, netType string, params map[string]string, callback StringCallback)
 	NetdevDel(id string, callback StringCallback)
+
+	QOMList(path string, callback StringCallback)
 }
 
 type MonitorErrorFunc func(error)

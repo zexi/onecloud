@@ -74,6 +74,8 @@ func AddGuestTaskHandler(prefix string, app *appsrv.Application) {
 			"resume":               guestResume,
 			"drive-mirror":         guestDriveMirror,
 			"hotplug-cpu-mem":      guestHotplugCpuMem,
+			"hotplug-add-device":   nil,
+			"hotplug-del-device":   nil,
 			"cancel-block-jobs":    guestCancelBlockJobs,
 			"create-from-libvirt":  guestCreateFromLibvirt,
 			"create-form-esxi":     guestCreateFromEsxi,

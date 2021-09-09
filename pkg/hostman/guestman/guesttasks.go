@@ -1451,3 +1451,54 @@ func (task *SCancelBlockJobs) taskComplete() {
 		hostutils.TaskComplete(task.ctx, nil)
 	}
 }
+
+type SGuestDeviceAddTask struct {
+	*SKVMGuestInstance
+
+	ctx    context.Context
+	device interface{}
+}
+
+func NewGuestDeviceAddTask(ctx context.Context, guest *SKVMGuestInstance, device interface{}) *SGuestDeviceAddTask {
+	return &SGuestDeviceAddTask{
+		SKVMGuestInstance: guest,
+		ctx:               ctx,
+		device:            device,
+	}
+}
+
+func (t *SGuestDeviceAddTask) Start() {
+	log.Errorf("===start add device")
+	t.Monitor.DeviceAdd("vfio-pci", nil, nil)
+}
+
+type SGuestDeviceDelTask struct {
+	*SKVMGuestInstance
+
+	ctx    context.Context
+	device interface{}
+}
+
+func NewGuestDeviceDelTask(ctx context.Context, guest *SKVMGuestInstance, device interface{}) *SGuestDeviceDelTask {
+	return &SGuestDeviceDelTask{
+		SKVMGuestInstance: guest,
+		ctx:               ctx,
+		device:            device,
+	}
+}
+
+func (t *SGuestDeviceDelTask) Start() {
+	log.Errorf("---start del device")
+	t.Monitor.DeviceDel("", nil)
+}
+
+func (t *SGuestDeviceDelTask) onDeviceDel(err string) {
+	if err != "" {
+		// device delete error
+		log.Errorf("delete device error: %v", err)
+		hostutils.TaskFailed(t.ctx, fmt.Sprintf("Delete device error: %v", err))
+	} else {
+		// sync remote device deleted
+		hostutils.TaskComplete(t.ctx, nil)
+	}
+}
