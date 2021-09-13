@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"yunion.io/x/jsonutils"
 	"yunion.io/x/log"
 
 	"yunion.io/x/onecloud/pkg/baremetal/utils/raid"
@@ -32,6 +33,7 @@ func GetRaidDevices(drv raid.IRaidDriver) []*baremetal.BaremetalStorage {
 	for _, ada := range drv.GetAdapters() {
 		devs = append(devs, ada.GetDevices()...)
 	}
+	log.Errorf("---get %q devs: %#v", drv.GetName(), devs)
 	return devs
 }
 
@@ -91,7 +93,7 @@ func DetectStorageInfo(term raid.IExecTerm, wait bool) ([]*baremetal.BaremetalSt
 			break
 		}
 	}
-	log.Infof("RaidDiskInfo: %#v, NonRaidSCSIDiskInfo: %#v, PCIEDiskInfo: %#v", raidDiskInfo, nonRaidDiskInfo, pcieDiskInfo)
+	log.Infof("RaidDiskInfo: %s, NonRaidSCSIDiskInfo: %s, PCIEDiskInfo: %s", jsonutils.Marshal(raidDiskInfo), jsonutils.Marshal(nonRaidDiskInfo), jsonutils.Marshal(pcieDiskInfo))
 	if len(nonRaidDiskInfo) < len(lvDiskInfo) {
 		return nil, nil, nil, fmt.Errorf("Fail to retrieve disk info")
 	}
