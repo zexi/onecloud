@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pierrec/lz4/v4"
+	// "github.com/pierrec/lz4/v4"
 
 	"yunion.io/x/log"
 
@@ -234,25 +234,27 @@ func startStream(w http.ResponseWriter, f IImage, startPos, endPos, rateLimit in
 	var CHUNK_SIZE int64 = int64(HostImageOptions.StreamChunkSize * 1024)
 	var readSize int64 = CHUNK_SIZE
 	var sendBytes int64
-	var lz4Writer = lz4.NewWriter(w)
+	// var lz4Writer = lz4.NewWriter(w)
 	var startTime = time.Now()
 
-	opts := []lz4.Option{
-		lz4.BlockSizeOption(lz4.Block4Mb),
-		lz4.ConcurrencyOption(-1),
-		lz4.CompressionLevelOption(lz4.Fast),
-	}
-	if HostImageOptions.Lz4ChecksumOff {
-		log.Infof("Turn off lz4 checksum")
-		opts = append(opts,
-			lz4.BlockChecksumOption(false),
-			lz4.ChecksumOption(false),
-		)
-	}
-	if err := lz4Writer.Apply(opts...); err != nil {
-		log.Errorf("lz4Writer.Apply options error: %v", err)
-		goto fail
-	}
+	/*
+	 * opts := []lz4.Option{
+	 * 	lz4.BlockSizeOption(lz4.Block4Mb),
+	 * 	lz4.ConcurrencyOption(-1),
+	 * 	lz4.CompressionLevelOption(lz4.Fast),
+	 * }
+	 * if HostImageOptions.Lz4ChecksumOff {
+	 * 	log.Infof("Turn off lz4 checksum")
+	 * 	opts = append(opts,
+	 * 		lz4.BlockChecksumOption(false),
+	 * 		lz4.ChecksumOption(false),
+	 * 	)
+	 * }
+	 * if err := lz4Writer.Apply(opts...); err != nil {
+	 * 	log.Errorf("lz4Writer.Apply options error: %v", err)
+	 * 	goto fail
+	 * }
+	 */
 
 	for startPos < endPos {
 		if endPos-startPos < CHUNK_SIZE {
@@ -264,7 +266,8 @@ func startStream(w http.ResponseWriter, f IImage, startPos, endPos, rateLimit in
 			goto fail
 		}
 		startPos += readSize
-		wSize, err := lz4Writer.Write(buf)
+		// wSize, err := lz4Writer.Write(buf)
+		wSize, err := w.Write(buf)
 		if err != nil {
 			log.Errorf("lz4Write error: %s", err)
 			goto fail
@@ -281,9 +284,11 @@ func startStream(w http.ResponseWriter, f IImage, startPos, endPos, rateLimit in
 	}
 
 fail:
-	if err := lz4Writer.Close(); err != nil {
-		log.Errorf("lz4 Close error: %s", err)
-	}
+	/*
+	 * if err := lz4Writer.Close(); err != nil {
+	 * 	log.Errorf("lz4 Close error: %s", err)
+	 * }
+	 */
 }
 
 func getImageMeta(ctx context.Context, w http.ResponseWriter, r *http.Request) {

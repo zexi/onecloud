@@ -28,7 +28,7 @@ import (
 	"syscall"
 
 	"bazil.org/fuse/fs"
-	"github.com/pierrec/lz4/v4"
+	// "github.com/pierrec/lz4/v4"
 	"github.com/pkg/errors"
 
 	"yunion.io/x/log"
@@ -226,12 +226,15 @@ func (fs *FetcherFs) doFetchData(idx int64) error {
 		return errors.Errorf("failed fetch data: %d %s", res.StatusCode, body)
 	}
 
-	var lz4Reader = lz4.NewReader(res.Body)
-	if err := lz4Reader.Apply(lz4.ConcurrencyOption(-1)); err != nil {
-		return errors.Errorf("Apply lz4 option: %v", err)
-	}
-
-	buf, err := ioutil.ReadAll(lz4Reader)
+	/*
+			 * var lz4Reader = lz4.NewReader(res.Body)
+			 * if err := lz4Reader.Apply(lz4.ConcurrencyOption(-1)); err != nil {
+			 * 	return errors.Errorf("Apply lz4 option: %v", err)
+			 * }
+		     *
+			 * buf, err := ioutil.ReadAll(lz4Reader)
+	*/
+	buf, err := ioutil.ReadAll(res.Body)
 	if len(buf) != int(end-start+1) {
 		return errors.Wrap(err, "written local file")
 	}
