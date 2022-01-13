@@ -1,3 +1,5 @@
+FROM registry.cn-beijing.aliyuncs.com/yunionio/baremetal-agent:master-lzx-mlx-driver as mlx
+
 FROM registry.cn-beijing.aliyuncs.com/yunionio/baremetal-base:v0.3.3-2
 
 MAINTAINER "Zexi Li <lizexi@yunionyun.com>"
@@ -6,3 +8,6 @@ RUN mkdir -p /opt/yunion/bin
 
 ENV TZ UTC
 ADD ./_output/alpine-build/bin/baremetal-agent /opt/yunion/bin/baremetal-agent
+
+COPY --from=mlx /opt/cloud/yunion/baremetal/initramfs /opt/cloud/yunion/baremetal
+COPY --from=mlx /opt/cloud/yunion/baremetal/kernel /opt/cloud/yunion/baremetal
