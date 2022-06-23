@@ -78,7 +78,7 @@ func (query *MetricQueryCondition) ExecuteQuery() (*mq.Metrics, error) {
 	}
 	queryResult, err := query.executeQuery(&evalContext, timeRange)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executeQuery")
 	}
 	metrics := mq.Metrics{
 		Series: make(tsdb.TimeSeriesSlice, 0),
@@ -139,9 +139,9 @@ func (c *MetricQueryCondition) executeQuery(context *alerting.EvalContext, timeR
 		if err == gocontext.DeadlineExceeded {
 			return nil, errors.Error("Alert execution exceeded the timeout")
 		}
-		log.Errorf("metricQuery HandleRequest error:%v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "metricQuery HandleRequest")
 	}
+	log.Errorf("----resp.Results: %s", jsonutils.Marshal(resp.Results))
 	for _, v := range resp.Results {
 		if v.Error != nil {
 			return nil, errors.Wrap(err, "metricQuery HandleResult response error")

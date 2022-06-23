@@ -192,7 +192,7 @@ func (self *SUnifiedMonitorManager) PerformQuery(ctx context.Context, userCred m
 	inputQuery := new(monitor.MetricInputQuery)
 	err := data.Unmarshal(inputQuery)
 	if err != nil {
-		return jsonutils.NewDict(), err
+		return nil, errors.Wrapf(err, "Unmarshal %s to monitor.MetricInputQuery", data)
 	}
 	if len(inputQuery.MetricQuery) == 0 {
 		return nil, merrors.NewArgIsEmptyErr("metric_query")
