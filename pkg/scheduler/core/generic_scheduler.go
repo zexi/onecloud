@@ -444,10 +444,14 @@ func findCandidatesThatFit(unit *Unit, candidates []Candidater, predicates map[s
 
 func preExecPredicate(unit *Unit, candidates []Candidater, predicates map[string]FitPredicate) (map[string]FitPredicate, error) {
 	newPredicateFuncs := map[string]FitPredicate{}
+	analysor := newPredicateAnalysor("preExecPredicate")
+	defer analysor.ShowResult()
 	for name, predicate := range predicates {
+		analysor.Start(name)
 		// generate new FitPredicates because of race condition?
 		newPredicate := predicate.Clone()
 		ok, err := newPredicate.PreExecute(unit, candidates)
+		analysor.End(name, time.Now())
 		if err != nil {
 			return nil, err
 		}
@@ -516,8 +520,13 @@ func unitFitsOnCandidate(
 		return NewSchedLog(candidateLogIndex, stage, messages, !fit)
 	}
 
+	analysor := newPredicateAnalysor("predicate Execute")
+	defer analysor.ShowResult()
 	for _, predicate := range predicates {
+		n := fmt.Sprintf("%s for %s", predicate.Name(), candidate.Getter().Name())
+		analysor.Start(n)
 		fit, reasons, err = predicate.Execute(unit, candidate)
+		analysor.End(n, time.Now())
 		logs = append(logs, toLog(fit, reasons, err, predicate.Name()))
 		if err != nil {
 			return false, nil, err
@@ -544,7 +553,7 @@ func unitFitsOnCandidate(
 // PrioritizeCandidates by running the individual priority functions in parallel.
 // Each priority function is expected to set a score of 0-10
 // 0 is the lowest priority score (least preffered node) and 10 is the highest
-/// Each priority function can also have its own weight
+// / Each priority function can also have its own weight
 // The resource scores returned by priority function are multiplied by the weights to get weighted scores
 // All scores are finally combined (added) to get the total weighted scores of all resources
 func PrioritizeCandidates(
