@@ -141,7 +141,7 @@ func buildRaid(driver raid.IRaidDriver, adapter raid.IRaidAdapter, confs []*api.
 		if err != nil {
 			return fmt.Errorf("Build raid %s: %v", conf.Conf, err)
 		}
-		log.Infof("Build %s:%d raid %s", driver.GetName(), adapter.GetIndex(), conf.Conf)
+		log.Infof("Build %s on adapter %d, raid %s", driver.GetName(), adapter.GetIndex(), conf.Conf)
 	}
 	if len(nonDisks) > 0 {
 		if err := adapter.BuildNoneRaid(nonDisks); err != nil {

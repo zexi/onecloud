@@ -66,6 +66,7 @@ import (
 	"yunion.io/x/onecloud/pkg/util/k8s/tokens"
 	"yunion.io/x/onecloud/pkg/util/logclient"
 	"yunion.io/x/onecloud/pkg/util/rbacutils"
+	"yunion.io/x/onecloud/pkg/util/redfish"
 	"yunion.io/x/onecloud/pkg/util/stringutils2"
 )
 
@@ -3703,6 +3704,14 @@ func (manager *SHostManager) ValidateCreateData(
 		// uuid := input.Uuid // data.GetString("uuid")
 		if len(input.AccessMac) == 0 && len(input.Uuid) == 0 {
 			return input, httperrors.NewInputParameterError("missing access_mac and uuid in no_probe mode")
+		}
+	}
+
+	if input.EnablePxeBoot != nil && !*input.EnablePxeBoot {
+		// validate redfish api
+		cli := redfish.NewRedfishDriver(ctx, input.IpmiIpAddr, input.IpmiUsername, input.IpmiPassword, false)
+		if cli == nil {
+			return input, httperrors.NewNotAcceptableError("not probe redfish driver, try to use PXE boot")
 		}
 	}
 
