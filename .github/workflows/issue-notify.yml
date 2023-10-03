@@ -1,0 +1,24 @@
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify-author-comment:
+    runs-on: ubuntu-latest
+    if: (github.event.issue.user.id == github.event.comment.user.id) && !github.event.issue.pull_request && (github.event.issue.state == 'open')
+    steps:
+      - name: feishu notify
+        uses: foxundermoon/feishu-action@v2
+        with:
+          url: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          msg_type: post
+          content: |
+            post:
+              zh_cn:
+                title: ${{ github.event.comment.user.name }} 回复了issue: ${{github.event.issue.title}}
+                content:
+                - - tag: text
+                    text: ${{ github.event.comment.content}}
+                - - tag: a
+                    text: 查看地址
+                    href: ${{ github.event.comment.html_url }}
