@@ -25,7 +25,8 @@ Cloudpods is a cloud-native open source unified multi/hybrid-cloud platform deve
 
 ### Summary & UI
 
-![](https://www.cloudpods.org/zh/docs/introduce/images/interface1.gif)
+<!-- ![](https://www.cloudpods.org/zh/docs/introduce/images/interface1.gif) -->
+<img src="https://www.cloudpods.org/zh/docs/introduce/images/interface1.gif" width="90%">
 
 <details>
   <summary>

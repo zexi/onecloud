@@ -23,7 +23,7 @@ Cloudpods是一个开源的Golang实现的云原生的融合多云/混合云的�
 
 ### 概览 & UI 展示
 
-![](https://www.cloudpods.org/zh/docs/introduce/images/interface1.gif)
+<img src="https://www.cloudpods.org/zh/docs/introduce/images/interface1.gif">
 
 <details>
   <summary>管理多云资源的功能，可以管理大多数的主流云，包括私有云，例如OpenStack，以及公有云，例如AWS，Azure，GCP，阿里云，华为云和腾讯云等</summary>
