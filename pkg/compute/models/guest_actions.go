@@ -5948,6 +5948,15 @@ func (self *SGuest) GetDetailsCpusetCores(ctx context.Context, userCred mcclient
 	return resp, nil
 }
 
+func (self *SGuest) GetDetailsHardwareInfo(ctx context.Context, userCred mcclient.TokenCredential, _ *api.ServerGetHardwareInfoInput) (*api.ServerGetHardwareInfoResp, error) {
+	host, err := self.GetHost()
+	if err != nil {
+		return nil, errors.Wrap(err, "GetHost")
+	}
+	host.GetHardwareSpecification()
+	return nil, nil
+}
+
 func (self *SGuest) PerformCalculateRecordChecksum(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, data jsonutils.JSONObject) (jsonutils.JSONObject, error) {
 	checksum, err := db.CalculateModelChecksum(self)
 	if err != nil {

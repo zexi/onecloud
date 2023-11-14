@@ -993,6 +993,55 @@ type ServerGetCPUSetCoresResp struct {
 	HostUsedCores []int `json:"host_used_cores"`
 }
 
+type ServerGetHardwareInfoInput struct{}
+
+type ServerHardwareInfoMotherboard struct {
+	Manufacturer string `json:"manufacturer"`
+	ProductName  string `json:"product_name"`
+	Version      string `json:"version"`
+	SerialNumber string `json:"serial_number"`
+
+	//PCIEVersion int    `json:"pcie_version"`
+	//LaneNumber  int    `json:"lane_number"`
+}
+
+type ServerHardwareInfoCPU struct {
+	ModelName string `json:"model_name"`
+	Count     int    `json:"count"`
+}
+
+type ServerHardwareInfoMemory struct {
+	SizeMB  int    `json:"size_mb"`
+	Version string `json:"version"`
+}
+
+type ServerHardwareInfoDisk struct {
+	ModelName string `json:"model_name"`
+	SizeMB    int    `json:"size_mb"`
+	// Disk's backend bandwidth. The unit is MB/s
+	Bandwidth int `json:"bandwidth"`
+}
+
+type ServerHardwareInfoGPU struct {
+	Id string `json:"id"`
+	// GPU model name
+	ModelName string `json:"model_name"`
+	// GPU memory size
+	MemoryGB int `json:"memory_gb"`
+	// GPU bandwidth. The unit is GB/s
+	Bandwidth int `json:"bandwidth"`
+	// TFLOPS stands for number of floating point operations per second.
+	TFLOPS int `json:"tflops"`
+}
+
+type ServerGetHardwareInfoResp struct {
+	Motherboard *ServerHardwareInfoMotherboard `json:"motherboard"`
+	CPU         *ServerHardwareInfoCPU         `json:"cpu"`
+	Memory      *ServerHardwareInfoMemory      `json:"memory"`
+	Disks       []*ServerHardwareInfoDisk      `json:"disk"`
+	GPUs        []*ServerHardwareInfoGPU       `json:"gpu"`
+}
+
 type ServerMonitorInput struct {
 	COMMAND string
 	QMP     bool
