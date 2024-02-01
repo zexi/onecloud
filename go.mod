@@ -87,6 +87,7 @@ require (
 	k8s.io/apimachinery v0.19.3
 	k8s.io/client-go v0.19.3
 	k8s.io/cluster-bootstrap v0.19.3
+	k8s.io/cri-api v0.22.17
 	moul.io/http2curl/v2 v2.3.0
 	yunion.io/x/cloudmux v0.3.10-0-alpha.1.0.20240131125226-85b9ae2d7f85
 	yunion.io/x/executor v0.0.0-20230705125604-c5ac3141db32
