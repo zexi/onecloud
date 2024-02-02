@@ -93,10 +93,8 @@ func (c crictl) RunPodSandbox(ctx context.Context, podConfig *runtimeapi.PodSand
 func (c crictl) PullImageWithSandbox(ctx context.Context, image string, auth *runtimeapi.AuthConfig, sandbox *runtimeapi.PodSandboxConfig, ann map[string]string) (*runtimeapi.PullImageResponse, error) {
 	req := &runtimeapi.PullImageRequest{
 		Image: &runtimeapi.ImageSpec{
-			Image:              image,
-			Annotations:        ann,
-			UserSpecifiedImage: "",
-			RuntimeHandler:     "",
+			Image:       image,
+			Annotations: ann,
 		},
 		Auth:          auth,
 		SandboxConfig: sandbox,
@@ -121,9 +119,6 @@ func (c crictl) CreateContainer(ctx context.Context,
 	}
 
 	image := ctrConfig.GetImage().GetImage()
-	if ctrConfig.Image.UserSpecifiedImage == "" {
-		ctrConfig.Image.UserSpecifiedImage = image
-	}
 
 	// When there is a withPull request or the image default mode is to
 	// pull-image-on-create(true) and no-pull was not set we pull the image when
@@ -199,7 +194,7 @@ func main() {
 	//ctl, err := NewCRICtl("unix:///run/containerd/containerd.sock", 3*time.Second)
 	ctl, err := NewCRICtl("unix:///var/run/yunion/containerd/containerd.sock", 3*time.Second)
 	if err != nil {
-		log.Fatalf("NewCRICtl", err)
+		log.Fatalf("NewCRICtl: %v", err)
 	}
 	ctx := context.Background()
 	imgs, err := ctl.ListImages(ctx, nil)

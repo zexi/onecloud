@@ -1499,7 +1499,7 @@ func (manager *SGuestManager) validateCreateData(
 	// var rootStorageType string
 	var osProf osprofile.SOSProfile
 	hypervisor = input.Hypervisor
-	if hypervisor != api.HYPERVISOR_CONTAINER {
+	if hypervisor != api.HYPERVISOR_POD {
 		if len(input.Disks) == 0 && input.Cdrom == "" {
 			return nil, httperrors.NewInputParameterError("No bootable disk information provided")
 		}
@@ -1647,7 +1647,7 @@ func (manager *SGuestManager) validateCreateData(
 	}
 
 	hypervisor = input.Hypervisor
-	if hypervisor != api.HYPERVISOR_CONTAINER {
+	if hypervisor != api.HYPERVISOR_POD {
 		// support sku here
 		var sku *SServerSku
 		skuName := input.InstanceType
