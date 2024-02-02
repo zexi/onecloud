@@ -112,18 +112,12 @@ type SKVMInstanceRuntime struct {
 
 type SKVMGuestInstance struct {
 	SKVMInstanceRuntime
+	*sBaseGuestInstance
 
-	Id         string
 	Monitor    monitor.Monitor
-	manager    *SGuestManager
 	guestAgent *qga.QemuGuestAgent
 
 	archMan arch.Arch
-
-	// runtime description, generate from source desc
-	Desc *desc.SGuestDesc
-	// source description, input from region
-	SourceDesc *desc.SGuestDesc
 }
 
 func NewKVMGuestInstance(id string, manager *SGuestManager) *SKVMGuestInstance {
@@ -135,9 +129,8 @@ func NewKVMGuestInstance(id string, manager *SGuestManager) *SKVMGuestInstance {
 		SKVMInstanceRuntime: SKVMInstanceRuntime{
 			blockJobTigger: make(map[string]chan struct{}),
 		},
-		Id:      id,
-		manager: manager,
-		archMan: arch.NewArch(qemuArch),
+		sBaseGuestInstance: newBaseGuestInstance(id, manager, api.HYPERVISOR_KVM),
+		archMan:            arch.NewArch(qemuArch),
 	}
 }
 
@@ -160,7 +153,7 @@ func (s *SKVMGuestInstance) updateGuestDesc() error {
 		return err
 	}
 
-	return s.SaveLiveDesc(s.Desc)
+	return SaveLiveDesc(s, s.Desc)
 }
 
 func (s *SKVMGuestInstance) initLiveDescFromSourceGuest(srcDesc *desc.SGuestDesc) error {
@@ -213,7 +206,7 @@ func (s *SKVMGuestInstance) initLiveDescFromSourceGuest(srcDesc *desc.SGuestDesc
 	if err != nil {
 		return errors.Wrap(err, "initLiveDescFromSourceGuest")
 	}
-	return s.SaveLiveDesc(srcDesc)
+	return SaveLiveDesc(s, srcDesc)
 }
 
 func (s *SKVMGuestInstance) IsStopping() bool {
@@ -250,18 +243,6 @@ func (s *SKVMGuestInstance) getQemuLogPath() string {
 
 func (s *SKVMGuestInstance) IsLoaded() bool {
 	return s.Desc != nil
-}
-
-func (s *SKVMGuestInstance) HomeDir() string {
-	return path.Join(s.manager.ServersPath, s.Id)
-}
-
-func (s *SKVMGuestInstance) PrepareDir() error {
-	output, err := procutils.NewCommand("mkdir", "-p", s.HomeDir()).Output()
-	if err != nil {
-		return errors.Wrapf(err, "mkdir %s failed: %s", s.HomeDir(), output)
-	}
-	return nil
 }
 
 func (s *SKVMGuestInstance) GetPidFilePath() string {
@@ -384,14 +365,6 @@ func (s *SKVMGuestInstance) isSelfCmdline(cmdline, uuid string) bool {
 	return (strings.Index(cmdline, "qemu-system") >= 0 ||
 		strings.Index(cmdline, "qemu-kvm") >= 0) &&
 		strings.Index(cmdline, uuid) >= 0
-}
-
-func (s *SKVMGuestInstance) GetDescFilePath() string {
-	return path.Join(s.HomeDir(), "desc")
-}
-
-func (s *SKVMGuestInstance) GetSourceDescFilePath() string {
-	return path.Join(s.HomeDir(), "source-desc")
 }
 
 func (s *SKVMGuestInstance) GetRescueDirPath() string {
@@ -666,7 +639,7 @@ func (s *SKVMGuestInstance) ImportServer(pendingDelete bool) {
 	if s.Desc.HostId != hostinfo.Instance().HostId {
 		// fix host_id
 		s.Desc.HostId = hostinfo.Instance().HostId
-		s.SaveLiveDesc(s.Desc)
+		SaveLiveDesc(s, s.Desc)
 	}
 
 	s.manager.SaveServer(s.Id, s)
@@ -1153,7 +1126,7 @@ func (s *SKVMGuestInstance) collectGuestDescription() error {
 		return errors.Wrap(err, "failed init guest devices")
 	}
 
-	if err := s.SaveLiveDesc(s.Desc); err != nil {
+	if err := SaveLiveDesc(s, s.Desc); err != nil {
 		return errors.Wrap(err, "failed save live desc")
 	}
 	return nil
@@ -1172,7 +1145,7 @@ func (s *SKVMGuestInstance) syncVirtioDiskNumQueues() error {
 			}
 		}
 	}
-	return s.SaveLiveDesc(s.Desc)
+	return SaveLiveDesc(s, s.Desc)
 }
 
 func (s *SKVMGuestInstance) getHotpluggableCPUList() ([]monitor.HotpluggableCPU, error) {
@@ -1461,7 +1434,7 @@ func (s *SKVMGuestInstance) releaseGuestCpuset() {
 		s.manager.cpuSet.ReleaseCpus(pcpuSet.ToSlice(), vcpuSet.Size())
 	}
 	s.Desc.VcpuPin = nil
-	s.SaveLiveDesc(s.Desc)
+	SaveLiveDesc(s, s.Desc)
 }
 
 func (s *SKVMGuestInstance) clearCgroup(pid int) {
@@ -1624,70 +1597,6 @@ func (s *SKVMGuestInstance) CheckBlockOrRunning(jobs int) {
 	if err != nil {
 		log.Errorln(err)
 	}
-}
-
-func (s *SKVMGuestInstance) SaveLiveDesc(guestDesc *desc.SGuestDesc) error {
-	s.Desc = guestDesc
-
-	defaultGwCnt := 0
-	defNics := netutils2.SNicInfoList{}
-	// fill in ovn vpc nic bridge field
-	for _, nic := range s.Desc.Nics {
-		if nic.Bridge == "" {
-			nic.Bridge = getNicBridge(nic)
-		}
-		if nic.IsDefault {
-			defaultGwCnt++
-		}
-		defNics = defNics.Add(nic.Ip, nic.Mac, nic.Gateway)
-	}
-
-	// there should 1 and only 1 default gateway
-	if defaultGwCnt != 1 {
-		// fix is_default
-		_, defIndex := defNics.FindDefaultNicMac()
-		for i := range s.Desc.Nics {
-			if i == defIndex {
-				s.Desc.Nics[i].IsDefault = true
-			} else {
-				s.Desc.Nics[i].IsDefault = false
-			}
-		}
-	}
-
-	if err := fileutils2.FilePutContents(
-		s.GetDescFilePath(), jsonutils.Marshal(s.Desc).String(), false,
-	); err != nil {
-		log.Errorf("save desc failed %s", err)
-		return errors.Wrap(err, "save desc")
-	}
-	return nil
-}
-
-func (s *SKVMGuestInstance) SaveDesc(guestDesc *desc.SGuestDesc) error {
-	s.SourceDesc = guestDesc
-	// fill in ovn vpc nic bridge field
-	for _, nic := range s.SourceDesc.Nics {
-		if nic.Bridge == "" {
-			nic.Bridge = getNicBridge(nic)
-		}
-	}
-
-	if err := fileutils2.FilePutContents(
-		s.GetSourceDescFilePath(), jsonutils.Marshal(s.SourceDesc).String(), false,
-	); err != nil {
-		log.Errorf("save source desc failed %s", err)
-		return errors.Wrap(err, "source save desc")
-	}
-
-	if !s.IsRunning() { // if guest not running, sync live desc
-		liveDesc := new(desc.SGuestDesc)
-		if err := jsonutils.Marshal(s.SourceDesc).Unmarshal(liveDesc); err != nil {
-			return errors.Wrap(err, "unmarshal live desc")
-		}
-		return s.SaveLiveDesc(liveDesc)
-	}
-	return nil
 }
 
 func (s *SKVMGuestInstance) GetVpcNIC() *desc.SGuestNetwork {
@@ -2310,7 +2219,7 @@ func (s *SKVMGuestInstance) SyncConfig(
 	var cdroms []*desc.SGuestCdrom
 	var floppys []*desc.SGuestFloppy
 
-	if err := s.SaveDesc(guestDesc); err != nil {
+	if err := SaveDesc(s, guestDesc); err != nil {
 		return nil, err
 	}
 
@@ -2343,7 +2252,7 @@ func (s *SKVMGuestInstance) SyncConfig(
 	s.Desc.SGuestRegionDesc = guestDesc.SGuestRegionDesc
 	s.Desc.SGuestMetaDesc = guestDesc.SGuestMetaDesc
 
-	s.SaveLiveDesc(s.Desc)
+	SaveLiveDesc(s, s.Desc)
 
 	if fwOnly {
 		res := jsonutils.NewDict()
@@ -2374,7 +2283,7 @@ func (s *SKVMGuestInstance) SyncConfig(
 
 	lenTasks := len(tasks)
 	var callBack = func(errs []error) {
-		s.SaveLiveDesc(s.Desc)
+		SaveLiveDesc(s, s.Desc)
 		if lenTasks > 0 { // devices updated, regenerate start script
 			vncPort := s.GetVncPort()
 			data := jsonutils.NewDict()
@@ -2500,7 +2409,7 @@ func (s *SKVMGuestInstance) setCgroupCPUSet() {
 			Pcpus: cpuset.NewCPUSet(cpus...).String(),
 		},
 	}
-	s.SaveLiveDesc(s.Desc)
+	SaveLiveDesc(s, s.Desc)
 }
 
 func (s *SKVMGuestInstance) allocGuestCpuset() []int {
@@ -2510,13 +2419,6 @@ func (s *SKVMGuestInstance) allocGuestCpuset() []int {
 		cpuset = append(cpuset, cpus...)
 	}
 	return cpuset
-}
-
-func (s *SKVMGuestInstance) CreateFromDesc(desc *desc.SGuestDesc) error {
-	if err := s.PrepareDir(); err != nil {
-		return fmt.Errorf("Failed to create server dir %s", desc.Uuid)
-	}
-	return s.SaveDesc(desc)
 }
 
 func (s *SKVMGuestInstance) GetNeedMergeBackingFileDiskIndexs() []int {
@@ -2542,7 +2444,7 @@ func (s *SKVMGuestInstance) streamDisksComplete(ctx context.Context) {
 			s.needSyncStreamDisks = true
 		}
 	}
-	if err := s.SaveLiveDesc(s.Desc); err != nil {
+	if err := SaveLiveDesc(s, s.Desc); err != nil {
 		log.Errorf("save guest desc failed %s", err)
 	}
 	if err := s.delFlatFiles(ctx); err != nil {
@@ -2565,7 +2467,7 @@ func (s *SKVMGuestInstance) sendStreamDisksComplete(ctx context.Context) {
 	}
 
 	s.needSyncStreamDisks = false
-	if err := s.SaveLiveDesc(s.Desc); err != nil {
+	if err := SaveLiveDesc(s, s.Desc); err != nil {
 		log.Errorf("save guest desc failed %s", err)
 	}
 }
@@ -2599,7 +2501,7 @@ func (s *SKVMGuestInstance) SyncMetadata(meta *jsonutils.JSONDict) error {
 func (s *SKVMGuestInstance) updateChildIndex() error {
 	idx := s.getQuorumChildIndex() + 1
 	s.Desc.Metadata[api.QUORUM_CHILD_INDEX] = strconv.Itoa(int(idx))
-	s.SaveLiveDesc(s.Desc)
+	SaveLiveDesc(s, s.Desc)
 	meta := jsonutils.NewDict()
 	meta.Set(api.QUORUM_CHILD_INDEX, jsonutils.NewInt(idx))
 	return s.SyncMetadata(meta)
@@ -2696,7 +2598,7 @@ func (s *SKVMGuestInstance) CleanImportMetadata() *jsonutils.JSONDict {
 
 	if meta.Length() > 0 {
 		// update local metadata record, after monitor started updata region record
-		s.SaveLiveDesc(s.Desc)
+		SaveLiveDesc(s, s.Desc)
 		return meta
 	}
 	return nil
@@ -3162,7 +3064,7 @@ func (s *SKVMGuestInstance) CPUSet(ctx context.Context, input []int) (*api.Serve
 
 func (s *SKVMGuestInstance) CPUSetRemove(ctx context.Context) error {
 	delete(s.Desc.Metadata, api.VM_METADATA_CGROUP_CPUSET)
-	if err := s.SaveLiveDesc(s.Desc); err != nil {
+	if err := SaveLiveDesc(s, s.Desc); err != nil {
 		return errors.Wrap(err, "save desc after update metadata")
 	}
 	if !s.IsRunning() {

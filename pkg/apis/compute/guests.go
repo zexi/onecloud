@@ -905,6 +905,8 @@ type GuestJsonDesc struct {
 	IsDaemon bool `json:"is_daemon"`
 
 	LightMode bool `json:"light_mode"`
+
+	Hypervisor string `json:"hypervisor"`
 }
 
 type ServerSetBootIndexInput struct {

@@ -343,7 +343,8 @@ type SGuestControlDesc struct {
 
 	EncryptKeyId string
 
-	LightMode bool // light mode
+	LightMode  bool // light mode
+	Hypervisor string
 }
 
 type SGuestMetaDesc struct {

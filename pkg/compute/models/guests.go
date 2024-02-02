@@ -4997,7 +4997,8 @@ func (self *SGuest) GetJsonDescAtHypervisor(ctx context.Context, host *SHost) *a
 
 		IsDaemon: self.IsDaemon.Bool(),
 
-		LightMode: self.RescueMode,
+		LightMode:  self.RescueMode,
+		Hypervisor: self.GetHypervisor(),
 	}
 
 	if len(self.BackupHostId) > 0 {

@@ -224,7 +224,7 @@ func (m *SGuestManager) GetUnknownServer(sid string) (*SKVMGuestInstance, bool) 
 	}
 }
 
-func (m *SGuestManager) SaveServer(sid string, s *SKVMGuestInstance) {
+func (m *SGuestManager) SaveServer(sid string, s GuestRuntimeInstance) {
 	m.Servers.Store(sid, s)
 }
 
@@ -690,23 +690,30 @@ func (m *SGuestManager) GuestCreate(ctx context.Context, params interface{}) (js
 		return nil, hostutils.ParamsError
 	}
 
-	var guest *SKVMGuestInstance
+	var guest GuestRuntimeInstance
 	e := func() error {
 		m.ServersLock.Lock()
 		defer m.ServersLock.Unlock()
 		if _, ok := m.GetServer(deployParams.Sid); ok {
 			return httperrors.NewBadRequestError("Guest %s exists", deployParams.Sid)
 		}
-		guest = NewKVMGuestInstance(deployParams.Sid, m)
-
+		var (
+			desc       *desc.SGuestDesc = nil
+			hypervisor                  = ""
+		)
 		if deployParams.Body.Contains("desc") {
-			var desc = new(desc.SGuestDesc)
 			err := deployParams.Body.Unmarshal(desc, "desc")
 			if err != nil {
 				return httperrors.NewBadRequestError("Guest desc unmarshal failed %s", err)
 			}
-			err = guest.CreateFromDesc(desc)
-			if err != nil {
+			hypervisor = desc.Hypervisor
+		}
+		//guest = NewKVMGuestInstance(deployParams.Sid, m)
+		factory := NewGuestRuntimeManager()
+		guest = factory.NewRuntimeInstance(deployParams.Sid, m, hypervisor)
+
+		if desc != nil {
+			if err := factory.CreateFromDesc(guest, desc); err != nil {
 				return errors.Wrap(err, "create from desc")
 			}
 		}
@@ -721,7 +728,7 @@ func (m *SGuestManager) GuestCreate(ctx context.Context, params interface{}) (js
 }
 
 func (m *SGuestManager) startDeploy(
-	ctx context.Context, deployParams *SGuestDeploy, guest *SKVMGuestInstance) (jsonutils.JSONObject, error) {
+	ctx context.Context, deployParams *SGuestDeploy, guest GuestRuntimeInstance) (jsonutils.JSONObject, error) {
 
 	if jsonutils.QueryBoolean(deployParams.Body, "k8s_pod", false) {
 		return nil, nil
@@ -753,7 +760,7 @@ func (m *SGuestManager) startDeploy(
 			password, deployParams.IsInit, false,
 			options.HostOptions.LinuxDefaultRootUser, options.HostOptions.WindowsDefaultAdminUser,
 			enableCloudInit, loginAccount, deployTelegraf, telegrafConfig,
-			guest.Desc.UserData,
+			guest.GetDesc().UserData,
 		),
 	)
 	if err != nil {
