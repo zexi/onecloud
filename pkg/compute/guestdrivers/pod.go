@@ -176,7 +176,6 @@ func (self *SPodDriver) RequestDeployGuestOnHost(ctx context.Context, guest *mod
 		log.Errorf("GetDeployConfigOnHost error: %v", err)
 		return err
 	}
-	config.Add(jsonutils.JSONTrue, "k8s_pod")
 	action, err := config.GetString("action")
 	if err != nil {
 		return err

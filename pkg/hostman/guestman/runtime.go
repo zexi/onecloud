@@ -2,6 +2,7 @@ package guestman
 
 import (
 	"context"
+	"fmt"
 	"path"
 
 	"yunion.io/x/jsonutils"
@@ -11,6 +12,7 @@ import (
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/hostman/guestman/desc"
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
+	"yunion.io/x/onecloud/pkg/hostman/options"
 	"yunion.io/x/onecloud/pkg/mcclient"
 	"yunion.io/x/onecloud/pkg/util/fileutils2"
 	"yunion.io/x/onecloud/pkg/util/netutils2"
@@ -18,15 +20,25 @@ import (
 )
 
 type GuestRuntimeInstance interface {
+	GetName() string
+	GetInitialId() string
+	GetId() string
 	HomeDir() string
 	GetDesc() *desc.SGuestDesc
 	SetDesc(guestDesc *desc.SGuestDesc)
 	GetSourceDesc() *desc.SGuestDesc
 	SetSourceDesc(guestDesc *desc.SGuestDesc)
 	GetDescFilePath() string
+	NicTrafficRecordPath() string
 	DeployFs(ctx context.Context, userCred mcclient.TokenCredential, deployInfo *deployapi.DeployInfo) (jsonutils.JSONObject, error)
 	GetSourceDescFilePath() string
 	IsRunning() bool
+	IsStopped() bool
+	IsSuspend() bool
+	IsLoaded() bool
+	GetNicDescMatch(mac, ip, port, bridge string) *desc.SGuestNetwork
+	CleanGuest(ctx context.Context, params interface{}) (jsonutils.JSONObject, error)
+	ImportServer(pendingDelete bool)
 }
 
 type sBaseGuestInstance struct {
@@ -45,6 +57,18 @@ func newBaseGuestInstance(id string, manager *SGuestManager, hypervisor string) 
 		manager:    manager,
 		Hypervisor: hypervisor,
 	}
+}
+
+func (s *sBaseGuestInstance) GetInitialId() string {
+	return s.Id
+}
+
+func (s *sBaseGuestInstance) GetId() string {
+	return s.Desc.Uuid
+}
+
+func (s *sBaseGuestInstance) GetName() string {
+	return fmt.Sprintf("%s(%s)", s.Desc.Name, s.Desc.Uuid)
 }
 
 func (b *sBaseGuestInstance) HomeDir() string {
@@ -75,6 +99,30 @@ func (s *sBaseGuestInstance) GetSourceDescFilePath() string {
 	return path.Join(s.HomeDir(), "source-desc")
 }
 
+func (s *sBaseGuestInstance) NicTrafficRecordPath() string {
+	return path.Join(s.HomeDir(), "nic_traffic.json")
+}
+
+func (s *sBaseGuestInstance) IsLoaded() bool {
+	return s.Desc != nil
+}
+
+func (s *sBaseGuestInstance) GetNicDescMatch(mac, ip, port, bridge string) *desc.SGuestNetwork {
+	nics := s.Desc.Nics
+	for _, nic := range nics {
+		if bridge == "" && nic.Bridge != "" && nic.Bridge == options.HostOptions.OvnIntegrationBridge {
+			continue
+		}
+		if (len(mac) == 0 || netutils2.MacEqual(nic.Mac, mac)) &&
+			(len(ip) == 0 || nic.Ip == ip) &&
+			(len(port) == 0 || nic.Ifname == port) &&
+			(len(bridge) == 0 || nic.Bridge == bridge) {
+			return nic
+		}
+	}
+	return nil
+}
+
 type GuestRuntimeManager struct {
 }
 
@@ -93,7 +141,7 @@ func (f *GuestRuntimeManager) NewRuntimeInstance(id string, manager *SGuestManag
 	return nil
 }
 
-func (f *GuestRuntimeManager) PrepareDir(s GuestRuntimeInstance) error {
+func PrepareDir(s GuestRuntimeInstance) error {
 	output, err := procutils.NewCommand("mkdir", "-p", s.HomeDir()).Output()
 	if err != nil {
 		return errors.Wrapf(err, "mkdir %s failed: %s", s.HomeDir(), output)
@@ -102,11 +150,23 @@ func (f *GuestRuntimeManager) PrepareDir(s GuestRuntimeInstance) error {
 }
 
 func (f *GuestRuntimeManager) CreateFromDesc(s GuestRuntimeInstance, desc *desc.SGuestDesc) error {
-	if err := f.PrepareDir(s); err != nil {
+	if err := PrepareDir(s); err != nil {
 		return errors.Errorf("Failed to create server dir %s", desc.Uuid)
 	}
 	return SaveDesc(s, desc)
 }
+
+func (s *sBaseGuestInstance) GetVpcNIC() *desc.SGuestNetwork {
+	for _, nic := range s.Desc.Nics {
+		if nic.Vpc.Provider == computeapi.VPC_PROVIDER_OVN {
+			if nic.Ip != "" {
+				return nic
+			}
+		}
+	}
+	return nil
+}
+
 func SaveDesc(s GuestRuntimeInstance, guestDesc *desc.SGuestDesc) error {
 	s.SetSourceDesc(guestDesc)
 	// fill in ovn vpc nic bridge field
@@ -169,4 +229,12 @@ func SaveLiveDesc(s GuestRuntimeInstance, guestDesc *desc.SGuestDesc) error {
 		return errors.Wrap(err, "save desc")
 	}
 	return nil
+}
+
+func GetPowerStates(s GuestRuntimeInstance) string {
+	if s.IsRunning() {
+		return computeapi.VM_POWER_STATES_ON
+	} else {
+		return computeapi.VM_POWER_STATES_OFF
+	}
 }

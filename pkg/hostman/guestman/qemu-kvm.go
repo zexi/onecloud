@@ -69,7 +69,6 @@ import (
 	"yunion.io/x/onecloud/pkg/util/cgrouputils/cpuset"
 	"yunion.io/x/onecloud/pkg/util/fileutils2"
 	"yunion.io/x/onecloud/pkg/util/fuseutils"
-	"yunion.io/x/onecloud/pkg/util/netutils2"
 	"yunion.io/x/onecloud/pkg/util/procutils"
 	"yunion.io/x/onecloud/pkg/util/qemuimg"
 	"yunion.io/x/onecloud/pkg/util/regutils2"
@@ -217,14 +216,6 @@ func (s *SKVMGuestInstance) IsValid() bool {
 	return s.Desc != nil && s.Desc.Uuid != ""
 }
 
-func (s *SKVMGuestInstance) GetId() string {
-	return s.Desc.Uuid
-}
-
-func (s *SKVMGuestInstance) GetName() string {
-	return fmt.Sprintf("%s(%s)", s.Desc.Name, s.Desc.Uuid)
-}
-
 func (s *SKVMGuestInstance) getStateFilePathRootPrefix() string {
 	return path.Join(s.HomeDir(), STATE_FILE_PREFIX)
 }
@@ -239,10 +230,6 @@ func (s *SKVMGuestInstance) GetStateFilePath(version string) string {
 
 func (s *SKVMGuestInstance) getQemuLogPath() string {
 	return path.Join(s.HomeDir(), "qemu.log")
-}
-
-func (s *SKVMGuestInstance) IsLoaded() bool {
-	return s.Desc != nil
 }
 
 func (s *SKVMGuestInstance) GetPidFilePath() string {
@@ -961,10 +948,6 @@ func (s *SKVMGuestInstance) QgaPath() string {
 	return path.Join(s.HomeDir(), "qga.sock")
 }
 
-func (s *SKVMGuestInstance) NicTrafficRecordPath() string {
-	return path.Join(s.HomeDir(), "nic_traffic.json")
-}
-
 func (s *SKVMGuestInstance) InitQga() error {
 	guestAgent, err := qga.NewQemuGuestAgent(s.Id, s.QgaPath())
 	if err != nil {
@@ -1073,7 +1056,7 @@ func (s *SKVMGuestInstance) syncStatusUnsync(reason string) {
 	statusInput := &apis.PerformStatusInput{
 		Status:      api.VM_UNSYNC,
 		Reason:      reason,
-		PowerStates: s.GetPowerStates(),
+		PowerStates: GetPowerStates(s),
 	}
 	if _, err := hostutils.UpdateServerStatus(context.Background(), s.Id, statusInput); err != nil {
 		log.Errorf("failed update guest status %s", err)
@@ -1563,20 +1546,12 @@ func (s *SKVMGuestInstance) SyncStatus(reason string) {
 	statusInput := &apis.PerformStatusInput{
 		Status:      status,
 		Reason:      reason,
-		PowerStates: s.GetPowerStates(),
+		PowerStates: GetPowerStates(s),
 		HostId:      hostinfo.Instance().HostId,
 	}
 
 	if _, err := hostutils.UpdateServerStatus(context.Background(), s.Id, statusInput); err != nil {
 		log.Errorf("failed update guest status %s", err)
-	}
-}
-
-func (s *SKVMGuestInstance) GetPowerStates() string {
-	if s.IsRunning() {
-		return api.VM_POWER_STATES_ON
-	} else {
-		return api.VM_POWER_STATES_OFF
 	}
 }
 
@@ -1590,24 +1565,13 @@ func (s *SKVMGuestInstance) CheckBlockOrRunning(jobs int) {
 	var statusInput = &apis.PerformStatusInput{
 		Status:         status,
 		BlockJobsCount: jobs,
-		PowerStates:    s.GetPowerStates(),
+		PowerStates:    GetPowerStates(s),
 		HostId:         hostinfo.Instance().HostId,
 	}
 	_, err := hostutils.UpdateServerStatus(context.Background(), s.Id, statusInput)
 	if err != nil {
 		log.Errorln(err)
 	}
-}
-
-func (s *SKVMGuestInstance) GetVpcNIC() *desc.SGuestNetwork {
-	for _, nic := range s.Desc.Nics {
-		if nic.Vpc.Provider == api.VPC_PROVIDER_OVN {
-			if nic.Ip != "" {
-				return nic
-			}
-		}
-	}
-	return nil
 }
 
 //func (s *SKVMGuestInstance) GetRescueDesc() error {
@@ -1937,22 +1901,6 @@ func (s *SKVMGuestInstance) ExecStopRescueTask(ctx context.Context, params inter
 
 func (s *SKVMGuestInstance) ExecSuspendTask(ctx context.Context) {
 	NewGuestSuspendTask(s, ctx, nil).Start()
-}
-
-func (s *SKVMGuestInstance) GetNicDescMatch(mac, ip, port, bridge string) *desc.SGuestNetwork {
-	nics := s.Desc.Nics
-	for _, nic := range nics {
-		if bridge == "" && nic.Bridge != "" && nic.Bridge == options.HostOptions.OvnIntegrationBridge {
-			continue
-		}
-		if (len(mac) == 0 || netutils2.MacEqual(nic.Mac, mac)) &&
-			(len(ip) == 0 || nic.Ip == ip) &&
-			(len(port) == 0 || nic.Ifname == port) &&
-			(len(bridge) == 0 || nic.Bridge == bridge) {
-			return nic
-		}
-	}
-	return nil
 }
 
 func pathEqual(disk, ndisk *desc.SGuestDisk) bool {

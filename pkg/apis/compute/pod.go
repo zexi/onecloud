@@ -37,3 +37,7 @@ type PodContainerCreateInput struct {
 type PodCreateInput struct {
 	Containers []*PodContainerCreateInput `json:"containers"`
 }
+
+type ContainerDesc struct {
+	Id string `json:"id"`
+}

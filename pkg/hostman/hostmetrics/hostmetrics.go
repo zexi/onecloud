@@ -500,7 +500,7 @@ func NewGuestMonitor(name, id string, pid int, nics []*desc.SGuestNetwork, cpuCo
 }
 
 func (m *SGuestMonitor) SetNicDown(index int) {
-	guest, ok := guestman.GetGuestManager().GetServer(m.Id)
+	guest, ok := guestman.GetGuestManager().GetKVMServer(m.Id)
 	if !ok {
 		return
 	}
@@ -579,7 +579,7 @@ func (m *SGuestMonitor) Netio() []*NetIOMetric {
 		var ifname = nic.Ifname
 		var nicStat *psnet.IOCountersStat
 		if nic.Driver == "vfio-pci" {
-			if guest, ok := guestman.GetGuestManager().GetServer(m.Id); ok {
+			if guest, ok := guestman.GetGuestManager().GetKVMServer(m.Id); ok {
 				dev, err := guest.GetSriovDeviceByNetworkIndex(nic.Index)
 				if err != nil {
 					log.Errorf("failed get sriov deivce by network index %s", err)
