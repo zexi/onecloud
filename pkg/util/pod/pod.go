@@ -2,6 +2,8 @@ package pod
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -13,9 +15,14 @@ import (
 )
 
 type CRI interface {
+	Version(ctx context.Context) (*runtimeapi.VersionResponse, error)
 	RunContainers(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, containerConfigs []*runtimeapi.ContainerConfig, runtimeHandler string) (*RunContainersResponse, error)
-	ListContainers(ctx context.Context, opts ListContainerOptions) (interface{}, error)
+	ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error)
 	ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error)
+
+	// lower layer client
+	// getImageClient() runtimeapi.ImageServiceClient
+	// getRuntimeClient() runtimeapi.RuntimeServiceClient
 }
 
 type ListContainerOptions struct {
@@ -207,4 +214,43 @@ func (c crictl) RunContainers(
 		ret.ContainerIds = append(ret.ContainerIds, ctrId)
 	}
 	return ret, nil
+}
+
+func (c crictl) ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error) {
+	filter := &runtimeapi.ContainerFilter{
+		Id:           opts.Id,
+		PodSandboxId: opts.PodId,
+	}
+	st := &runtimeapi.ContainerStateValue{}
+	if opts.State != "" {
+		st.State = runtimeapi.ContainerState_CONTAINER_UNKNOWN
+		switch strings.ToLower(opts.State) {
+		case "created":
+			st.State = runtimeapi.ContainerState_CONTAINER_CREATED
+		case "running":
+			st.State = runtimeapi.ContainerState_CONTAINER_RUNNING
+		case "exited":
+			st.State = runtimeapi.ContainerState_CONTAINER_EXITED
+		case "unknown":
+			st.State = runtimeapi.ContainerState_CONTAINER_UNKNOWN
+		default:
+			return nil, fmt.Errorf("unsupported state: %q", opts.State)
+		}
+		filter.State = st
+	}
+	if opts.Labels != nil {
+		filter.LabelSelector = opts.Labels
+	}
+	req := &runtimeapi.ListContainersRequest{
+		Filter: filter,
+	}
+	r, err := c.getRuntimeClient().ListContainers(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "ListContainers")
+	}
+	return r.Containers, nil
+}
+
+func (c crictl) Version(ctx context.Context) (*runtimeapi.VersionResponse, error) {
+	return c.getRuntimeClient().Version(ctx, &runtimeapi.VersionRequest{})
 }

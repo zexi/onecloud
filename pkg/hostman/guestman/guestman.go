@@ -104,9 +104,6 @@ type SGuestManager struct {
 
 	cpuSet     *CpuSetCounter
 	pythonPath string
-
-	// pod related members
-	cri pod.CRI
 }
 
 func NewGuestManager(host hostutils.IHost, serversPath string) *SGuestManager {
@@ -128,9 +125,6 @@ func NewGuestManager(host hostutils.IHost, serversPath string) *SGuestManager {
 	manager.dirtyServers = make([]GuestRuntimeInstance, 0)
 	manager.qemuMachineCpuMax = make(map[string]uint, 0)
 	procutils.NewCommand("mkdir", "-p", manager.QemuLogDir()).Run()
-	if err := manager.initCRI(host); err != nil {
-		log.Fatalf("Init Container Runtime Interface: %v", err)
-	}
 	return manager
 }
 
@@ -205,21 +199,8 @@ func (m *SGuestManager) InitPythonPath() error {
 	return errors.Errorf("No python/python2/python3 found in PATH")
 }
 
-func (m *SGuestManager) initCRI(host hostutils.IHost) error {
-	if !host.IsContainerdRunning() {
-		return nil
-	}
-	ep := host.GetContainerdEndpoint()
-	cri, err := pod.NewCRI(ep, 3*time.Second)
-	if err != nil {
-		return errors.Wrapf(err, "New CRI by endpoint %q", ep)
-	}
-	m.cri = cri
-	return nil
-}
-
 func (m *SGuestManager) GetCRI() pod.CRI {
-	return m.cri
+	return m.host.GetCRI()
 }
 
 func (m *SGuestManager) getPythonPath() string {
