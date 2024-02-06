@@ -54,7 +54,6 @@ import (
 	"yunion.io/x/onecloud/pkg/mcclient"
 	modules "yunion.io/x/onecloud/pkg/mcclient/modules/compute"
 	"yunion.io/x/onecloud/pkg/util/cgrouputils"
-	"yunion.io/x/onecloud/pkg/util/cgrouputils/cpuset"
 	"yunion.io/x/onecloud/pkg/util/fileutils2"
 	"yunion.io/x/onecloud/pkg/util/netutils2"
 	"yunion.io/x/onecloud/pkg/util/pod"
@@ -421,36 +420,43 @@ func (m *SGuestManager) LoadExistingGuests() {
 	}
 }
 
-func (m *SGuestManager) LoadServer(sid string) {
-	guest := NewKVMGuestInstance(sid, m)
-	err := guest.LoadDesc()
+func (m *SGuestManager) GetServerDescFilePath(sid string) string {
+	return path.Join(m.ServersPath, sid, "desc")
+}
+
+func (m *SGuestManager) GetServerDesc(sid string) (*desc.SGuestDesc, error) {
+	descPath := m.GetServerDescFilePath(sid)
+	descStr, err := ioutil.ReadFile(descPath)
 	if err != nil {
+		return nil, errors.Wrapf(err, "read file %s", descPath)
+	}
+	desc := new(desc.SGuestDesc)
+	jsonSrcDesc, err := jsonutils.Parse(descStr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "json parse: %s", descStr)
+	}
+	if err := jsonSrcDesc.Unmarshal(desc); err != nil {
+		return nil, errors.Wrap(err, "unmarshal desc")
+	}
+	return desc, nil
+}
+
+func (m *SGuestManager) LoadServer(sid string) {
+	desc, err := m.GetServerDesc(sid)
+	if err != nil {
+		log.Errorf("Get server %s desc: %v", sid, err)
+		return
+	}
+	guest := NewGuestRuntimeManager().NewRuntimeInstance(sid, m, desc.Hypervisor)
+	if err := guest.LoadDesc(); err != nil {
 		log.Errorf("On load server error: %s", err)
 		return
 	}
 
-	if guest.needSyncStreamDisks {
-		go guest.sendStreamDisksComplete(context.Background())
-	}
 	m.CandidateServers[sid] = guest
-	m.loadGuestCpuset(guest)
-}
-
-func (m *SGuestManager) loadGuestCpuset(guest *SKVMGuestInstance) {
-	if guest.GetPid() > 0 {
-		for _, vcpuPin := range guest.Desc.VcpuPin {
-			pcpuSet, err := cpuset.Parse(vcpuPin.Pcpus)
-			if err != nil {
-				log.Errorf("failed parse %s pcpus: %s", guest.GetName(), vcpuPin.Pcpus)
-				continue
-			}
-			vcpuSet, err := cpuset.Parse(vcpuPin.Vcpus)
-			if err != nil {
-				log.Errorf("failed parse %s vcpus: %s", guest.GetName(), vcpuPin.Vcpus)
-				continue
-			}
-			m.cpuSet.LoadCpus(pcpuSet.ToSlice(), vcpuSet.Size())
-		}
+	if err := guest.PostLoad(m); err != nil {
+		log.Errorf("Post load server %s: %v", sid, err)
+		return
 	}
 }
 
@@ -703,6 +709,7 @@ func (m *SGuestManager) GuestCreate(ctx context.Context, params interface{}) (js
 	if !ok {
 		return nil, hostutils.ParamsError
 	}
+	log.Infof("===========params: %#v", params)
 
 	var guest GuestRuntimeInstance
 	e := func() error {
@@ -712,22 +719,23 @@ func (m *SGuestManager) GuestCreate(ctx context.Context, params interface{}) (js
 			return httperrors.NewBadRequestError("Guest %s exists", deployParams.Sid)
 		}
 		var (
-			desc       *desc.SGuestDesc = nil
+			descInfo   *desc.SGuestDesc = nil
 			hypervisor                  = ""
 		)
 		if deployParams.Body.Contains("desc") {
-			err := deployParams.Body.Unmarshal(desc, "desc")
+			descInfo = new(desc.SGuestDesc)
+			err := deployParams.Body.Unmarshal(descInfo, "desc")
 			if err != nil {
 				return httperrors.NewBadRequestError("Guest desc unmarshal failed %s", err)
 			}
-			hypervisor = desc.Hypervisor
+			hypervisor = descInfo.Hypervisor
 		}
 		//guest = NewKVMGuestInstance(deployParams.Sid, m)
 		factory := NewGuestRuntimeManager()
 		guest = factory.NewRuntimeInstance(deployParams.Sid, m, hypervisor)
 
-		if desc != nil {
-			if err := factory.CreateFromDesc(guest, desc); err != nil {
+		if descInfo != nil {
+			if err := factory.CreateFromDesc(guest, descInfo); err != nil {
 				return errors.Wrap(err, "create from desc")
 			}
 		}
@@ -816,42 +824,16 @@ func (m *SGuestManager) Status(sid string) string {
 	return status
 }
 
-func (m *SGuestManager) StatusWithBlockJobsCount(ctx context.Context, params interface{}) (jsonutils.JSONObject, error) {
+func (m *SGuestManager) GetGuestStatus(ctx context.Context, params interface{}) (jsonutils.JSONObject, error) {
 	sid := params.(string)
 	status := m.getStatus(sid)
-	guest, _ := m.GetKVMServer(sid)
+	guest, _ := m.GetServer(sid)
 	body := jsonutils.NewDict()
 	if guest != nil {
 		body.Set("power_status", jsonutils.NewString(GetPowerStates(guest)))
 	}
 
-	if status == GUEST_RUNNING && guest.pciUninitialized {
-		status = compute.VM_UNSYNC
-	} else if status == GUEST_RUNNING {
-		var runCb = func() {
-			body := jsonutils.NewDict()
-			blockJobsCount := guest.BlockJobsCount()
-			if blockJobsCount > 0 {
-				status = GUEST_BLOCK_STREAM
-			}
-			body.Set("block_jobs_count", jsonutils.NewInt(int64(blockJobsCount)))
-			body.Set("status", jsonutils.NewString(status))
-			hostutils.TaskComplete(ctx, body)
-		}
-		if guest.Monitor == nil && !guest.IsStopping() {
-			if err := guest.StartMonitor(context.Background(), runCb); err != nil {
-				log.Errorf("guest %s failed start monitor %s", guest.GetName(), err)
-				body.Set("status", jsonutils.NewString(status))
-				hostutils.TaskComplete(ctx, body)
-			}
-		} else {
-			runCb()
-		}
-		return nil, nil
-	}
-	body.Set("status", jsonutils.NewString(status))
-	hostutils.TaskComplete(ctx, body)
-	return nil, nil
+	return guest.HandleGuestStatus(ctx, status, body)
 }
 
 func (m *SGuestManager) getStatus(sid string) string {
@@ -883,36 +865,14 @@ func (m *SGuestManager) Delete(sid string) (GuestRuntimeInstance, error) {
 }
 
 func (m *SGuestManager) GuestStart(ctx context.Context, userCred mcclient.TokenCredential, sid string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
-	if guest, ok := m.GetKVMServer(sid); ok {
+	if guest, ok := m.GetServer(sid); ok {
 		guestDesc := new(desc.SGuestDesc)
 		if err := body.Unmarshal(guestDesc, "desc"); err == nil {
 			if err = SaveDesc(guest, guestDesc); err != nil {
 				return nil, errors.Wrap(err, "save desc")
 			}
 		}
-		if guest.IsStopped() {
-			data, err := body.Get("params")
-			if err != nil {
-				data = jsonutils.NewDict()
-			}
-			err = guest.StartGuest(ctx, userCred, data.(*jsonutils.JSONDict))
-			if err != nil {
-				return nil, err
-			}
-			res := jsonutils.NewDict()
-			res.Set("vnc_port", jsonutils.NewInt(0))
-			return res, nil
-		} else {
-			vncPort := guest.GetVncPort()
-			if vncPort > 0 {
-				res := jsonutils.NewDict()
-				res.Set("vnc_port", jsonutils.NewInt(int64(vncPort)))
-				res.Set("is_running", jsonutils.JSONTrue)
-				return res, nil
-			} else {
-				return nil, httperrors.NewBadRequestError("Seems started, but no VNC info")
-			}
-		}
+		return guest.HandleGuestStart(ctx, userCred, body)
 	} else {
 		return nil, httperrors.NewNotFoundError("Not found server %s", sid)
 	}

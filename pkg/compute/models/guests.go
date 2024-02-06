@@ -4757,9 +4757,11 @@ func (self *SGuest) DeleteAllInstanceSnapshotInDB(ctx context.Context, userCred 
 
 func (self *SGuest) isNeedDoResetPasswd() bool {
 	guestdisks, _ := self.GetGuestDisks()
-	disk := guestdisks[0].GetDisk()
-	if len(disk.SnapshotId) > 0 {
-		return false
+	if len(guestdisks) > 0 {
+		disk := guestdisks[0].GetDisk()
+		if len(disk.SnapshotId) > 0 {
+			return false
+		}
 	}
 	return true
 }

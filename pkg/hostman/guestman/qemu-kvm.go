@@ -371,52 +371,9 @@ func (s *SKVMGuestInstance) CreateRescueDirPath() (string, error) {
 }
 
 func (s *SKVMGuestInstance) LoadDesc() error {
-	descPath := s.GetDescFilePath()
-	descStr, err := ioutil.ReadFile(descPath)
-	if err != nil {
-		return errors.Wrap(err, "read desc")
+	if err := LoadDesc(s); err != nil {
+		return errors.Wrap(err, "LoadDesc")
 	}
-
-	var (
-		srcDescStr  []byte
-		srcDescPath = s.GetSourceDescFilePath()
-	)
-	if !fileutils2.Exists(srcDescPath) {
-		err = fileutils2.FilePutContents(srcDescPath, string(descStr), false)
-		if err != nil {
-			return errors.Wrap(err, "save source desc")
-		}
-		srcDescStr = descStr
-	} else {
-		srcDescStr, err = ioutil.ReadFile(srcDescPath)
-		if err != nil {
-			return errors.Wrap(err, "read source desc")
-		}
-	}
-
-	// parse source desc
-	srcGuestDesc := new(desc.SGuestDesc)
-	jsonSrcDesc, err := jsonutils.Parse(srcDescStr)
-	if err != nil {
-		return errors.Wrap(err, "json parse source desc")
-	}
-	err = jsonSrcDesc.Unmarshal(srcGuestDesc)
-	if err != nil {
-		return errors.Wrap(err, "unmarshal source desc")
-	}
-	s.SourceDesc = srcGuestDesc
-
-	// parse desc
-	guestDesc := new(desc.SGuestDesc)
-	jsonDesc, err := jsonutils.Parse(descStr)
-	if err != nil {
-		return errors.Wrap(err, "json parse desc")
-	}
-	err = jsonDesc.Unmarshal(guestDesc)
-	if err != nil {
-		return errors.Wrap(err, "unmarshal desc")
-	}
-	s.Desc = guestDesc
 
 	if s.IsRunning() {
 		if len(s.Desc.PCIControllers) > 0 {
@@ -434,6 +391,32 @@ func (s *SKVMGuestInstance) LoadDesc() error {
 		}
 	}
 
+	return nil
+}
+
+func (s *SKVMGuestInstance) PostLoad(m *SGuestManager) error {
+	if s.needSyncStreamDisks {
+		go s.sendStreamDisksComplete(context.Background())
+	}
+	return s.loadGuestCpuset(m)
+}
+
+func (s *SKVMGuestInstance) loadGuestCpuset(m *SGuestManager) error {
+	if s.GetPid() > 0 {
+		for _, vcpuPin := range s.GetDesc().VcpuPin {
+			pcpuSet, err := cpuset.Parse(vcpuPin.Pcpus)
+			if err != nil {
+				log.Errorf("failed parse %s pcpus: %s", s.GetName(), vcpuPin.Pcpus)
+				continue
+			}
+			vcpuSet, err := cpuset.Parse(vcpuPin.Vcpus)
+			if err != nil {
+				log.Errorf("failed parse %s vcpus: %s", s.GetName(), vcpuPin.Vcpus)
+				continue
+			}
+			m.cpuSet.LoadCpus(pcpuSet.ToSlice(), vcpuSet.Size())
+		}
+	}
 	return nil
 }
 
@@ -1631,6 +1614,32 @@ func (s *SKVMGuestInstance) prepareEncryptKeyForStart(ctx context.Context, userC
 	return params, nil
 }
 
+func (s *SKVMGuestInstance) HandleGuestStart(ctx context.Context, userCred mcclient.TokenCredential, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
+	if s.IsStopped() {
+		data, err := body.Get("params")
+		if err != nil {
+			data = jsonutils.NewDict()
+		}
+		err = s.StartGuest(ctx, userCred, data.(*jsonutils.JSONDict))
+		if err != nil {
+			return nil, errors.Wrap(err, "StartGuest")
+		}
+		res := jsonutils.NewDict()
+		res.Set("vnc_port", jsonutils.NewInt(0))
+		return res, nil
+	} else {
+		vncPort := s.GetVncPort()
+		if vncPort > 0 {
+			res := jsonutils.NewDict()
+			res.Set("vnc_port", jsonutils.NewInt(int64(vncPort)))
+			res.Set("is_running", jsonutils.JSONTrue)
+			return res, nil
+		} else {
+			return nil, httperrors.NewBadRequestError("Seems started, but no VNC info")
+		}
+	}
+}
+
 func (s *SKVMGuestInstance) StartGuest(ctx context.Context, userCred mcclient.TokenCredential, params *jsonutils.JSONDict) error {
 	var err error
 	params, err = s.prepareEncryptKeyForStart(ctx, userCred, params)
@@ -1788,11 +1797,7 @@ func (s *SKVMGuestInstance) Delete(ctx context.Context, migrated bool) error {
 	if err := s.delTmpDisks(ctx, migrated); err != nil {
 		return errors.Wrap(err, "delTmpDisks")
 	}
-	output, err := procutils.NewCommand("rm", "-rf", s.HomeDir()).Output()
-	if err != nil {
-		return errors.Wrapf(err, "rm %s failed: %s", s.HomeDir(), output)
-	}
-	return nil
+	return DeleteHomeDir(s)
 }
 
 func (s *SKVMGuestInstance) Stop() bool {
@@ -3177,4 +3182,34 @@ func (s *SKVMGuestInstance) getTftpEndpoint(baremetalManagerUri string) (string,
 	endpoint := fmt.Sprintf("%s:%d", endpoints[0], port+1000)
 
 	return endpoint, nil
+}
+
+func (s *SKVMGuestInstance) HandleGuestStatus(ctx context.Context, status string, body *jsonutils.JSONDict) (jsonutils.JSONObject, error) {
+	if status == GUEST_RUNNING && s.pciUninitialized {
+		status = api.VM_UNSYNC
+	} else if status == GUEST_RUNNING {
+		var runCb = func() {
+			body := jsonutils.NewDict()
+			blockJobsCount := s.BlockJobsCount()
+			if blockJobsCount > 0 {
+				status = GUEST_BLOCK_STREAM
+			}
+			body.Set("block_jobs_count", jsonutils.NewInt(int64(blockJobsCount)))
+			body.Set("status", jsonutils.NewString(status))
+			hostutils.TaskComplete(ctx, body)
+		}
+		if s.Monitor == nil && !s.IsStopping() {
+			if err := s.StartMonitor(context.Background(), runCb); err != nil {
+				log.Errorf("guest %s failed start monitor %s", s.GetName(), err)
+				body.Set("status", jsonutils.NewString(status))
+				hostutils.TaskComplete(ctx, body)
+			}
+		} else {
+			runCb()
+		}
+		return nil, nil
+	}
+	body.Set("status", jsonutils.NewString(status))
+	hostutils.TaskComplete(ctx, body)
+	return nil, nil
 }

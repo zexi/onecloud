@@ -142,7 +142,7 @@ func guestActions(f actionFunc) appsrv.FilterHandler {
 func getStatus(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	params, _, _ := appsrv.FetchEnv(ctx, w, r)
 	sid := params["<sid>"]
-	hostutils.DelayTaskWithoutReqctx(ctx, guestman.GetGuestManager().StatusWithBlockJobsCount, sid)
+	hostutils.DelayTaskWithoutReqctx(ctx, guestman.GetGuestManager().GetGuestStatus, sid)
 	hostutils.ResponseOk(ctx, w)
 }
 

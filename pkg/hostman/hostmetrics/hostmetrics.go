@@ -167,7 +167,10 @@ func (s *SGuestMonitorCollector) GetGuests() map[string]*SGuestMonitor {
 	gms := make(map[string]*SGuestMonitor, 0)
 	guestmanager := guestman.GetGuestManager()
 	guestmanager.Servers.Range(func(k, v interface{}) bool {
-		guest := v.(*guestman.SKVMGuestInstance)
+		guest, ok := v.(*guestman.SKVMGuestInstance)
+		if !ok {
+			return false
+		}
 		if !guest.IsValid() {
 			return false
 		}

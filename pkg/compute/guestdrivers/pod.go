@@ -113,7 +113,29 @@ func (self *SPodDriver) RequestGuestHotAddIso(ctx context.Context, guest *models
 }
 
 func (self *SPodDriver) RequestStartOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, userCred mcclient.TokenCredential, task taskman.ITask) error {
-	return httperrors.NewUnsupportOperationError("")
+	header := self.getTaskRequestHeader(task)
+
+	config := jsonutils.NewDict()
+	desc, err := guest.GetDriver().GetJsonDescAtHost(ctx, userCred, guest, host, nil)
+	if err != nil {
+		return errors.Wrapf(err, "GetJsonDescAtHost")
+	}
+	config.Add(desc, "desc")
+	params := task.GetParams()
+	if params.Length() > 0 {
+		config.Add(params, "params")
+	}
+	url := fmt.Sprintf("%s/servers/%s/start", host.ManagerUri, guest.Id)
+	_, body, err := httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "POST", url, header, config, false)
+	if err != nil {
+		return err
+	}
+	if jsonutils.QueryBoolean(body, "is_running", false) {
+		taskman.LocalTaskRun(task, func() (jsonutils.JSONObject, error) {
+			return body, nil
+		})
+	}
+	return nil
 }
 
 func (self *SPodDriver) RequestStopOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask, syncStatus bool) error {

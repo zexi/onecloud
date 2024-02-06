@@ -16,6 +16,10 @@ import (
 
 type CRI interface {
 	Version(ctx context.Context) (*runtimeapi.VersionResponse, error)
+	ListPods(ctx context.Context, opts ListPodOptions) ([]*runtimeapi.PodSandbox, error)
+	RunPod(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error)
+	CreateContainer(ctx context.Context, podId string, podConfig *runtimeapi.PodSandboxConfig, ctrConfig *runtimeapi.ContainerConfig, withPull bool) (string, error)
+	StartContainer(ctx context.Context, id string) error
 	RunContainers(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, containerConfigs []*runtimeapi.ContainerConfig, runtimeHandler string) (*RunContainersResponse, error)
 	ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error)
 	ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error)
@@ -88,6 +92,10 @@ func (c crictl) getRuntimeClient() runtimeapi.RuntimeServiceClient {
 	return c.runCli
 }
 
+func (c crictl) Version(ctx context.Context) (*runtimeapi.VersionResponse, error) {
+	return c.getRuntimeClient().Version(ctx, &runtimeapi.VersionRequest{})
+}
+
 func (c crictl) ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -101,7 +109,7 @@ func (c crictl) ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) 
 	return resp.Images, nil
 }
 
-func (c crictl) RunPodSandbox(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error) {
+func (c crictl) RunPod(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error) {
 	req := &runtimeapi.RunPodSandboxRequest{
 		Config:         podConfig,
 		RuntimeHandler: runtimeHandler,
@@ -109,7 +117,7 @@ func (c crictl) RunPodSandbox(ctx context.Context, podConfig *runtimeapi.PodSand
 	log.Infof("RunPodSandboxRequest: %v", req)
 	r, err := c.getRuntimeClient().RunPodSandbox(ctx, req)
 	if err != nil {
-		return "", errors.Wrapf(err, "RunPodSandbox with request: %s", req.String())
+		return "", errors.Wrapf(err, "RunPod with request: %s", req.String())
 	}
 	return r.GetPodSandboxId(), nil
 }
@@ -192,9 +200,9 @@ type RunContainersResponse struct {
 func (c crictl) RunContainers(
 	ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, containerConfigs []*runtimeapi.ContainerConfig, runtimeHandler string) (*RunContainersResponse, error) {
 	// Create the pod
-	podId, err := c.RunPodSandbox(ctx, podConfig, runtimeHandler)
+	podId, err := c.RunPod(ctx, podConfig, runtimeHandler)
 	if err != nil {
-		return nil, errors.Wrap(err, "RunPodSandbox")
+		return nil, errors.Wrap(err, "RunPod")
 	}
 	ret := &RunContainersResponse{
 		PodId:        podId,
@@ -251,6 +259,34 @@ func (c crictl) ListContainers(ctx context.Context, opts ListContainerOptions) (
 	return r.Containers, nil
 }
 
-func (c crictl) Version(ctx context.Context) (*runtimeapi.VersionResponse, error) {
-	return c.getRuntimeClient().Version(ctx, &runtimeapi.VersionRequest{})
+type ListPodOptions struct {
+	Id    string
+	State string
+}
+
+func (c crictl) ListPods(ctx context.Context, opts ListPodOptions) ([]*runtimeapi.PodSandbox, error) {
+	filter := &runtimeapi.PodSandboxFilter{
+		Id: opts.Id,
+	}
+	if opts.State != "" {
+		st := &runtimeapi.PodSandboxStateValue{}
+		st.State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
+		switch strings.ToLower(opts.State) {
+		case "ready":
+			st.State = runtimeapi.PodSandboxState_SANDBOX_READY
+		case "notready":
+			st.State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
+		default:
+			return nil, errors.Errorf("Invalid state: %q", opts.State)
+		}
+		filter.State = st
+	}
+	req := &runtimeapi.ListPodSandboxRequest{
+		Filter: filter,
+	}
+	ret, err := c.getRuntimeClient().ListPodSandbox(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "ListPodSandbox")
+	}
+	return ret.Items, nil
 }

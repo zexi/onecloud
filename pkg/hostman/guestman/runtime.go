@@ -3,6 +3,7 @@ package guestman
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"path"
 
 	"yunion.io/x/jsonutils"
@@ -39,6 +40,12 @@ type GuestRuntimeInstance interface {
 	GetNicDescMatch(mac, ip, port, bridge string) *desc.SGuestNetwork
 	CleanGuest(ctx context.Context, params interface{}) (jsonutils.JSONObject, error)
 	ImportServer(pendingDelete bool)
+
+	HandleGuestStatus(ctx context.Context, status string, body *jsonutils.JSONDict) (jsonutils.JSONObject, error)
+	HandleGuestStart(ctx context.Context, userCred mcclient.TokenCredential, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
+
+	LoadDesc() error
+	PostLoad(m *SGuestManager) error
 }
 
 type sBaseGuestInstance struct {
@@ -167,6 +174,56 @@ func (s *sBaseGuestInstance) GetVpcNIC() *desc.SGuestNetwork {
 	return nil
 }
 
+func LoadDesc(s GuestRuntimeInstance) error {
+	descPath := s.GetDescFilePath()
+	descStr, err := ioutil.ReadFile(descPath)
+	if err != nil {
+		return errors.Wrap(err, "read desc")
+	}
+
+	var (
+		srcDescStr  []byte
+		srcDescPath = s.GetSourceDescFilePath()
+	)
+	if !fileutils2.Exists(srcDescPath) {
+		err = fileutils2.FilePutContents(srcDescPath, string(descStr), false)
+		if err != nil {
+			return errors.Wrap(err, "save source desc")
+		}
+		srcDescStr = descStr
+	} else {
+		srcDescStr, err = ioutil.ReadFile(srcDescPath)
+		if err != nil {
+			return errors.Wrap(err, "read source desc")
+		}
+	}
+
+	// parse source desc
+	srcGuestDesc := new(desc.SGuestDesc)
+	jsonSrcDesc, err := jsonutils.Parse(srcDescStr)
+	if err != nil {
+		return errors.Wrap(err, "json parse source desc")
+	}
+	err = jsonSrcDesc.Unmarshal(srcGuestDesc)
+	if err != nil {
+		return errors.Wrap(err, "unmarshal source desc")
+	}
+	s.SetSourceDesc(srcGuestDesc)
+
+	// parse desc
+	guestDesc := new(desc.SGuestDesc)
+	jsonDesc, err := jsonutils.Parse(descStr)
+	if err != nil {
+		return errors.Wrap(err, "json parse desc")
+	}
+	err = jsonDesc.Unmarshal(guestDesc)
+	if err != nil {
+		return errors.Wrap(err, "unmarshal desc")
+	}
+	s.SetDesc(guestDesc)
+	return nil
+}
+
 func SaveDesc(s GuestRuntimeInstance, guestDesc *desc.SGuestDesc) error {
 	s.SetSourceDesc(guestDesc)
 	// fill in ovn vpc nic bridge field
@@ -237,4 +294,12 @@ func GetPowerStates(s GuestRuntimeInstance) string {
 	} else {
 		return computeapi.VM_POWER_STATES_OFF
 	}
+}
+
+func DeleteHomeDir(s GuestRuntimeInstance) error {
+	output, err := procutils.NewCommand("rm", "-rf", s.HomeDir()).Output()
+	if err != nil {
+		return errors.Wrapf(err, "rm %s failed: %s", s.HomeDir(), output)
+	}
+	return nil
 }
