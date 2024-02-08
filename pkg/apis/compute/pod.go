@@ -14,6 +14,25 @@
 
 package compute
 
+import (
+	"reflect"
+
+	"yunion.io/x/jsonutils"
+	"yunion.io/x/pkg/gotypes"
+
+	"yunion.io/x/onecloud/pkg/apis"
+)
+
+func init() {
+	gotypes.RegisterSerializable(reflect.TypeOf(new(ContainerSpec)), func() gotypes.ISerializable {
+		return new(ContainerSpec)
+	})
+}
+
+const (
+	CONTAINER_STATUS_RUNNING = "running"
+)
+
 type ContainerKeyValue struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
@@ -22,6 +41,18 @@ type ContainerKeyValue struct {
 type PodContainerCreateInput struct {
 	// Container name
 	Name string `json:"name"`
+	ContainerSpec
+}
+
+type PodCreateInput struct {
+	Containers []*PodContainerCreateInput `json:"containers"`
+}
+
+type ContainerDesc struct {
+	Id string `json:"id"`
+}
+
+type ContainerSpec struct {
 	// Image to use.
 	Image string `json:"image"`
 	// Command to execute (i.e., entrypoint for docker)
@@ -34,10 +65,22 @@ type PodContainerCreateInput struct {
 	Envs []*ContainerKeyValue `json:"envs"`
 }
 
-type PodCreateInput struct {
-	Containers []*PodContainerCreateInput `json:"containers"`
+func (c *ContainerSpec) String() string {
+	return jsonutils.Marshal(c).String()
 }
 
-type ContainerDesc struct {
-	Id string `json:"id"`
+func (c *ContainerSpec) IsZero() bool {
+	if reflect.DeepEqual(*c, ContainerSpec{}) {
+		return true
+	}
+	return false
+}
+
+type ContainerCreateInput struct {
+	apis.VirtualResourceCreateInput
+
+	GuestId string        `json:"guest_id"`
+	Spec    ContainerSpec `json:"spec"`
+	// swagger:ignore
+	SkipTask bool `json:"skip_task"`
 }

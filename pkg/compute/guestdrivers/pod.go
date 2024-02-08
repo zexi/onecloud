@@ -100,6 +100,14 @@ func (self *SPodDriver) GetMinimalSysDiskSizeGb() int {
 	return options.Options.DefaultDiskSizeMB / 1024
 }
 
+func (p *SPodDriver) StartGuestCreateTask(guest *models.SGuest, ctx context.Context, userCred mcclient.TokenCredential, data *jsonutils.JSONDict, pendingUsage quotas.IQuota, parentTaskId string) error {
+	task, err := taskman.TaskManager.NewTask(ctx, "PodCreateTask", guest, userCred, data, parentTaskId, "", pendingUsage)
+	if err != nil {
+		return errors.Wrap(err, "New PodCreateTask")
+	}
+	return task.ScheduleRun(nil)
+}
+
 func (self *SPodDriver) RequestGuestCreateAllDisks(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
 	// do nothing, call next stage
 	task.ScheduleRun(nil)
@@ -205,6 +213,17 @@ func (self *SPodDriver) RequestDeployGuestOnHost(ctx context.Context, guest *mod
 	url := fmt.Sprintf("%s/servers/%s/%s", host.ManagerUri, guest.Id, action)
 	header := self.getTaskRequestHeader(task)
 	_, _, err = httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "POST", url, header, config, false)
+	return err
+}
+
+func (p *SPodDriver) RequestStartContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
+	pod := task.GetPod()
+	ctr := task.GetContainer()
+	host, _ := pod.GetHost()
+
+	url := fmt.Sprintf("%s/pods/%s/containers/%s/start", host.ManagerUri, pod.GetId(), ctr.GetId())
+	header := p.getTaskRequestHeader(task)
+	_, _, err := httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "POST", url, header, jsonutils.Marshal(ctr.Spec), false)
 	return err
 }
 
