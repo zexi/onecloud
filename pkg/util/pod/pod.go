@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
+	"yunion.io/x/jsonutils"
 
 	"yunion.io/x/log"
 	"yunion.io/x/pkg/errors"
@@ -18,10 +19,13 @@ type CRI interface {
 	Version(ctx context.Context) (*runtimeapi.VersionResponse, error)
 	ListPods(ctx context.Context, opts ListPodOptions) ([]*runtimeapi.PodSandbox, error)
 	RunPod(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error)
+	RemovePod(ctx context.Context, podId string) error
 	CreateContainer(ctx context.Context, podId string, podConfig *runtimeapi.PodSandboxConfig, ctrConfig *runtimeapi.ContainerConfig, withPull bool) (string, error)
 	StartContainer(ctx context.Context, id string) error
+	StopContainer(ctx context.Context, ctrId string, timeout int64) error
 	RunContainers(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, containerConfigs []*runtimeapi.ContainerConfig, runtimeHandler string) (*RunContainersResponse, error)
 	ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error)
+	ContainerStatus(ctx context.Context, ctrId string) (*runtimeapi.ContainerStatusResponse, error)
 	ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error)
 
 	// lower layer client
@@ -151,6 +155,8 @@ func (c crictl) CreateContainer(ctx context.Context,
 		Config:        ctrConfig,
 		SandboxConfig: podConfig,
 	}
+
+	log.Infof("======container config: %s", jsonutils.Marshal(ctrConfig).PrettyString())
 
 	image := ctrConfig.GetImage().GetImage()
 
@@ -289,4 +295,31 @@ func (c crictl) ListPods(ctx context.Context, opts ListPodOptions) ([]*runtimeap
 		return nil, errors.Wrap(err, "ListPodSandbox")
 	}
 	return ret.Items, nil
+}
+
+func (c crictl) RemovePod(ctx context.Context, podId string) error {
+	if _, err := c.getRuntimeClient().RemovePodSandbox(ctx, &runtimeapi.RemovePodSandboxRequest{
+		PodSandboxId: podId,
+	}); err != nil {
+		return errors.Wrap(err, "RemovePodSandbox")
+	}
+	return nil
+}
+
+func (c crictl) StopContainer(ctx context.Context, ctrId string, timeout int64) error {
+	if _, err := c.getRuntimeClient().StopContainer(ctx, &runtimeapi.StopContainerRequest{
+		ContainerId: ctrId,
+		Timeout:     timeout,
+	}); err != nil {
+		return errors.Wrap(err, "StopContainer")
+	}
+	return nil
+}
+
+func (c crictl) ContainerStatus(ctx context.Context, ctrId string) (*runtimeapi.ContainerStatusResponse, error) {
+	req := &runtimeapi.ContainerStatusRequest{
+		ContainerId: ctrId,
+		Verbose:     false,
+	}
+	return c.getRuntimeClient().ContainerStatus(ctx, req)
 }

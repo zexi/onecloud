@@ -47,7 +47,13 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		Pod: &computeapi.PodCreateInput{
 			Containers: []*computeapi.PodContainerCreateInput{
 				{
-					Image: o.IMAGE,
+					ContainerSpec: computeapi.ContainerSpec{
+						Image:      o.IMAGE,
+						Command:    nil,
+						Args:       nil,
+						WorkingDir: "",
+						Envs:       nil,
+					},
 				},
 			},
 		},

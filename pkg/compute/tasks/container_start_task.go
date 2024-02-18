@@ -39,18 +39,26 @@ func (t *ContainerStartTask) OnInit(ctx context.Context, obj db.IStandaloneModel
 
 func (t *ContainerStartTask) requestStart(ctx context.Context, container *models.SContainer) {
 	t.SetStage("OnStarted", nil)
-	container.SetStatus(t.GetUserCred(), api.VM_STARTING, "")
-	if err := t.GetPodDriver().RequestStartContainer(ctx, t.GetUserCred(), t.GetPod(), t.GetContainer(), t); err != nil {
+	if err := t.GetPodDriver().RequestStartContainer(ctx, t.GetUserCred(), t); err != nil {
 		t.OnStartedFailed(ctx, container, jsonutils.NewString(err.Error()))
 		return
 	}
 }
 
 func (t *ContainerStartTask) OnStarted(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
-	t.SetStageComplete(ctx, nil)
+	t.SetStage("OnSyncStatus", nil)
+	container.StartSyncStatusTask(ctx, t.GetUserCred(), t.GetTaskId())
 }
 
 func (t *ContainerStartTask) OnStartedFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
-	container.SetStatus(t.GetUserCred(), api.VM_START_FAILED, reason.String())
+	container.SetStatus(t.GetUserCred(), api.CONTAINER_STATUS_START_FAILED, reason.String())
+	t.SetStageFailed(ctx, reason)
+}
+
+func (t *ContainerStartTask) OnSyncStatus(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
+	t.SetStageComplete(ctx, nil)
+}
+
+func (t *ContainerStartTask) OnSyncStatusFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
 	t.SetStageFailed(ctx, reason)
 }

@@ -61,7 +61,7 @@ type SContainer struct {
 	// Index is the container order of a pod
 	Index int `nullable:"false" default:"0" list:"user" update:"user"`
 	// Spec stores all container running options
-	Spec api.ContainerSpec `length:"long"`
+	Spec *api.ContainerSpec `length:"long" create:"required" list:"user"`
 }
 
 func (m *SContainerManager) CreateOnPod(
@@ -93,6 +93,14 @@ func (m *SContainerManager) FilterByUniqValues(q *sqlchemy.SQuery, values jsonut
 	return q
 }
 
+func (m *SContainerManager) ListItemFilter(ctx context.Context, q *sqlchemy.SQuery, userCred mcclient.TokenCredential, query api.ContainerListInput) (*sqlchemy.SQuery, error) {
+	q, err := m.SVirtualResourceBaseManager.ListItemFilter(ctx, q, userCred, query.VirtualResourceListInput)
+	if err != nil {
+		return nil, errors.Wrap(err, "SVirtualResourceBaseManager.ListItemFilter")
+	}
+	return q, nil
+}
+
 func (m *SContainerManager) GetContainersByPod(guestId string) ([]SContainer, error) {
 	q := m.Query().Equals("guest_id", guestId)
 	ctrs := make([]SContainer, 0)
@@ -111,13 +119,13 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 		return nil, errors.Wrapf(err, "fetch guest by %s", input.GuestId)
 	}
 	input.GuestId = obj.GetId()
-	if err := m.validateSpec(input.Spec); err != nil {
+	if err := m.ValidateSpec(input.Spec); err != nil {
 		return nil, errors.Wrap(err, "validate spec")
 	}
 	return input, nil
 }
 
-func (m *SContainerManager) validateSpec(input api.ContainerSpec) error {
+func (m *SContainerManager) ValidateSpec(input api.ContainerSpec) error {
 	return nil
 }
 
@@ -158,4 +166,22 @@ func (c *SContainer) StartCreateTask(ctx context.Context, userCred mcclient.Toke
 
 func (c *SContainer) GetPod() *SGuest {
 	return GuestManager.FetchGuestById(c.GuestId)
+}
+
+func (c *SContainer) StartStartTask(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error {
+	c.SetStatus(userCred, api.CONTAINER_STATUS_STARTING, "")
+	task, err := taskman.TaskManager.NewTask(ctx, "ContainerStartTask", c, userCred, nil, parentTaskId, "", nil)
+	if err != nil {
+		return errors.Wrap(err, "NewTask")
+	}
+	return task.ScheduleRun(nil)
+}
+
+func (c *SContainer) StartSyncStatusTask(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error {
+	c.SetStatus(userCred, api.CONTAINER_STATUS_SYNC_STATUS, "")
+	task, err := taskman.TaskManager.NewTask(ctx, "ContainerSyncStatusTask", c, userCred, nil, parentTaskId, "", nil)
+	if err != nil {
+		return errors.Wrap(err, "NewTask")
+	}
+	return task.ScheduleRun(nil)
 }

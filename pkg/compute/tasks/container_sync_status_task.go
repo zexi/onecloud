@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"yunion.io/x/jsonutils"
+	"yunion.io/x/log"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
@@ -41,7 +42,15 @@ func (t *ContainerSyncStatusTask) OnInit(ctx context.Context, obj db.IStandalone
 	}
 }
 
+func (t *ContainerSyncStatusTask) OnSyncStatus(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
+	log.Infof("========recv from status data: %s", data.PrettyString())
+	resp := new(api.ContainerSyncStatusResponse)
+	data.Unmarshal(resp)
+	container.SetStatus(t.GetUserCred(), resp.Status, "")
+	t.SetStageComplete(ctx, nil)
+}
+
 func (t *ContainerSyncStatusTask) OnSyncStatusFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
-	container.SetStatus(t.GetUserCred(), api.VM_UNKNOWN, reason.String())
+	container.SetStatus(t.GetUserCred(), api.CONTAINER_STATUS_SYNC_STATUS_FAILED, reason.String())
 	t.SetStageFailed(ctx, reason)
 }

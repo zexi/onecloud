@@ -20,6 +20,7 @@ import (
 
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/pkg/errors"
+	"yunion.io/x/pkg/util/sets"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
@@ -59,10 +60,11 @@ func (t *PodCreateTask) OnPodCreated(ctx context.Context, guest *models.SGuest, 
 		return
 	}
 
+	guest.SetStatus(t.GetUserCred(), api.POD_STATUS_CREATING_CONTAINER, "")
 	ctrs := make([]*models.SContainer, len(input.Pod.Containers))
 	for idx, ctr := range input.Pod.Containers {
 		if obj, err := models.GetContainerManager().CreateOnPod(ctx, t.GetUserCred(), guest.GetOwnerId(), guest, ctr); err != nil {
-			t.onError(ctx, errors.Wrapf(err, "create container on pod: %s", guest.GetName()))
+			t.onCreateContainerError(ctx, guest, errors.Wrapf(err, "create container on pod: %s", guest.GetName()))
 			return
 		} else {
 			ctrs[idx] = obj
@@ -71,10 +73,15 @@ func (t *PodCreateTask) OnPodCreated(ctx context.Context, guest *models.SGuest, 
 
 	for idx, ctr := range ctrs {
 		if err := ctr.StartCreateTask(ctx, t.GetUserCred(), t.GetTaskId()); err != nil {
-			t.onError(ctx, errors.Wrapf(err, "start container %d creation task", idx))
+			t.onCreateContainerError(ctx, guest, errors.Wrapf(err, "start container %d creation task", idx))
 			return
 		}
 	}
+}
+
+func (t *PodCreateTask) onCreateContainerError(ctx context.Context, guest *models.SGuest, err error) {
+	guest.SetStatus(t.GetUserCred(), api.POD_STATUS_CREATE_CONTAINER_FAILED, err.Error())
+	t.onError(ctx, err)
 }
 
 func (t *PodCreateTask) onError(ctx context.Context, err error) {
@@ -91,17 +98,28 @@ func (t *PodCreateTask) OnContainerCreated(ctx context.Context, guest *models.SG
 		t.SetStageFailed(ctx, jsonutils.NewString(err.Error()))
 		return
 	}
-	isAllRunning := true
+	isAllCreated := true
+	createdStatus := []string{api.CONTAINER_STATUS_RUNNING, api.CONTAINER_STATUS_UNKNOWN, api.CONTAINER_STATUS_CREATED, api.CONTAINER_STATUS_EXITED}
 	for _, ctr := range ctrs {
-		if ctr.GetStatus() != api.CONTAINER_STATUS_RUNNING {
-			isAllRunning = false
+		if !sets.NewString(createdStatus...).Has(ctr.GetStatus()) {
+			isAllCreated = false
 		}
 	}
-	if isAllRunning {
-		t.SetStageComplete(ctx, nil)
+	if isAllCreated {
+		t.SetStage("OnStatusSynced", nil)
+		guest.StartSyncstatus(ctx, t.GetUserCred(), t.GetTaskId())
 	}
 }
 
 func (t *PodCreateTask) OnContainerCreatedFailed(ctx context.Context, guest *models.SGuest, data jsonutils.JSONObject) {
+	guest.SetStatus(t.GetUserCred(), api.POD_STATUS_CREATE_CONTAINER_FAILED, data.String())
+	t.SetStageFailed(ctx, data)
+}
+
+func (t *PodCreateTask) OnStatusSynced(ctx context.Context, guest *models.SGuest, data jsonutils.JSONObject) {
+	t.SetStageComplete(ctx, nil)
+}
+
+func (t *PodCreateTask) OnStatusSyncedFailed(ctx context.Context, guest *models.SGuest, data jsonutils.JSONObject) {
 	t.SetStageFailed(ctx, data)
 }

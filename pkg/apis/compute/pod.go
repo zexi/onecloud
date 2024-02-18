@@ -30,7 +30,25 @@ func init() {
 }
 
 const (
-	CONTAINER_STATUS_RUNNING = "running"
+	POD_STATUS_CREATING_CONTAINER      = "creating_container"
+	POD_STATUS_CREATE_CONTAINER_FAILED = "create_container_failed"
+
+	CONTAINER_STATUS_CREATING           = "creating"
+	CONTAINER_STATUS_CREATE_FAILED      = "create_failed"
+	CONTAINER_STATUS_STARTING           = "starting"
+	CONTAINER_STATUS_START_FAILED       = "start_failed"
+	CONTAINER_STATUS_SYNC_STATUS        = "sync_status"
+	CONTAINER_STATUS_SYNC_STATUS_FAILED = "sync_status_failed"
+	CONTAINER_STATUS_UNKNOWN            = "unknown"
+	CONTAINER_STATUS_CREATED            = "created"
+	CONTAINER_STATUS_EXITED             = "exited"
+	CONTAINER_STATUS_RUNNING            = "running"
+)
+
+const (
+	POD_METADATA_CRI_ID       = "cri_id"
+	POD_METADATA_CRI_CONFIG   = "cri_config"
+	CONTAINER_METADATA_CRI_ID = "cri_id"
 )
 
 type ContainerKeyValue struct {
@@ -46,6 +64,15 @@ type PodContainerCreateInput struct {
 
 type PodCreateInput struct {
 	Containers []*PodContainerCreateInput `json:"containers"`
+}
+
+type PodStartResponse struct {
+	CRIId     string `json:"cri_id"`
+	IsRunning bool   `json:"is_running"`
+}
+
+type ContainerSyncStatusResponse struct {
+	Status string `json:"status"`
 }
 
 type ContainerDesc struct {
@@ -83,4 +110,8 @@ type ContainerCreateInput struct {
 	Spec    ContainerSpec `json:"spec"`
 	// swagger:ignore
 	SkipTask bool `json:"skip_task"`
+}
+
+type ContainerListInput struct {
+	apis.VirtualResourceListInput
 }

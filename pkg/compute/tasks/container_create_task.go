@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"yunion.io/x/jsonutils"
+	"yunion.io/x/pkg/errors"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
@@ -50,16 +51,28 @@ func init() {
 }
 
 func (t *ContainerCreateTask) OnInit(ctx context.Context, obj db.IStandaloneModel, body jsonutils.JSONObject) {
-	t.requestStart(ctx, obj.(*models.SContainer))
+	t.requestCreate(ctx, obj.(*models.SContainer))
 }
 
-func (t *ContainerCreateTask) requestStart(ctx context.Context, container *models.SContainer) {
-	t.SetStage("OnStarted", nil)
-	container.SetStatus(t.GetUserCred(), api.VM_STARTING, "")
-	if err := t.GetPodDriver().RequestStartContainer(ctx, t.GetUserCred(), t); err != nil {
-		t.OnStartedFailed(ctx, container, jsonutils.NewString(err.Error()))
+func (t *ContainerCreateTask) requestCreate(ctx context.Context, container *models.SContainer) {
+	t.SetStage("OnCreated", nil)
+	container.SetStatus(t.GetUserCred(), api.CONTAINER_STATUS_CREATING, "")
+	if err := t.GetPodDriver().RequestCreateContainer(ctx, t.GetUserCred(), t); err != nil {
+		t.OnCreatedFailed(ctx, container, jsonutils.NewString(err.Error()))
 		return
 	}
+}
+
+func (t *ContainerCreateTask) OnCreated(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
+	t.SetStage("OnStarted", nil)
+	if err := container.StartStartTask(ctx, t.GetUserCred(), t.GetTaskId()); err != nil {
+		t.OnCreatedFailed(ctx, container, jsonutils.NewString(errors.Wrap(err, "StartStartTask").Error()))
+	}
+}
+
+func (t *ContainerCreateTask) OnCreatedFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
+	container.SetStatus(t.GetUserCred(), api.CONTAINER_STATUS_CREATE_FAILED, reason.String())
+	t.SetStageFailed(ctx, reason)
 }
 
 func (t *ContainerCreateTask) OnStarted(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
@@ -67,6 +80,5 @@ func (t *ContainerCreateTask) OnStarted(ctx context.Context, container *models.S
 }
 
 func (t *ContainerCreateTask) OnStartedFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
-	container.SetStatus(t.GetUserCred(), api.VM_START_FAILED, reason.String())
 	t.SetStageFailed(ctx, reason)
 }
