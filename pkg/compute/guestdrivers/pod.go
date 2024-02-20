@@ -125,14 +125,12 @@ func (p *SPodDriver) StartGuestCreateTask(guest *models.SGuest, ctx context.Cont
 
 func (p *SPodDriver) RequestGuestCreateAllDisks(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
 	// do nothing, call next stage
-	task.ScheduleRun(nil)
-	return nil
+	return task.ScheduleRun(nil)
 }
 
 func (p *SPodDriver) RequestGuestHotAddIso(ctx context.Context, guest *models.SGuest, path string, boot bool, task taskman.ITask) error {
 	// do nothing, call next stage
-	task.ScheduleRun(nil)
-	return nil
+	return task.ScheduleRun(nil)
 }
 
 func (p *SPodDriver) RequestStartOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, userCred mcclient.TokenCredential, task taskman.ITask) error {
@@ -206,6 +204,14 @@ func (p *SPodDriver) RequestDetachDisksFromGuestForDelete(ctx context.Context, g
 }
 
 func (p *SPodDriver) RequestUndeployGuestOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask) error {
+	task, err := taskman.TaskManager.NewTask(ctx, "PodDeleteTask", guest, task.GetUserCred(), nil, task.GetTaskId(), "", nil)
+	if err != nil {
+		return errors.Wrap(err, "New PodDeleteTask")
+	}
+	return task.ScheduleRun(nil)
+}
+
+func (p *SPodDriver) RequestUndeployPod(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask) error {
 	url := fmt.Sprintf("%s/servers/%s", host.ManagerUri, guest.Id)
 	header := p.getTaskRequestHeader(task)
 	_, _, err := httputils.JSONRequest(httputils.GetDefaultClient(), ctx, "DELETE", url, header, nil, false)

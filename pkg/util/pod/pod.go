@@ -23,6 +23,7 @@ type CRI interface {
 	CreateContainer(ctx context.Context, podId string, podConfig *runtimeapi.PodSandboxConfig, ctrConfig *runtimeapi.ContainerConfig, withPull bool) (string, error)
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, ctrId string, timeout int64) error
+	RemoveContainer(ctx context.Context, ctrId string) error
 	RunContainers(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, containerConfigs []*runtimeapi.ContainerConfig, runtimeHandler string) (*RunContainersResponse, error)
 	ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error)
 	ContainerStatus(ctx context.Context, ctrId string) (*runtimeapi.ContainerStatusResponse, error)
@@ -312,6 +313,16 @@ func (c crictl) StopContainer(ctx context.Context, ctrId string, timeout int64) 
 		Timeout:     timeout,
 	}); err != nil {
 		return errors.Wrap(err, "StopContainer")
+	}
+	return nil
+}
+
+func (c crictl) RemoveContainer(ctx context.Context, ctrId string) error {
+	_, err := c.getRuntimeClient().RemoveContainer(ctx, &runtimeapi.RemoveContainerRequest{
+		ContainerId: ctrId,
+	})
+	if err != nil {
+		return errors.Wrap(err, "RemoveContainer")
 	}
 	return nil
 }

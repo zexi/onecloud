@@ -32,6 +32,8 @@ func init() {
 const (
 	POD_STATUS_CREATING_CONTAINER      = "creating_container"
 	POD_STATUS_CREATE_CONTAINER_FAILED = "create_container_failed"
+	POD_STATUS_DELETING_CONTAINER      = "deleting_container"
+	POD_STATUS_DELETE_CONTAINER_FAILED = "delete_container_failed"
 
 	CONTAINER_STATUS_CREATING           = "creating"
 	CONTAINER_STATUS_CREATE_FAILED      = "create_failed"
@@ -43,6 +45,8 @@ const (
 	CONTAINER_STATUS_CREATED            = "created"
 	CONTAINER_STATUS_EXITED             = "exited"
 	CONTAINER_STATUS_RUNNING            = "running"
+	CONTAINER_STATUS_DELETING           = "deleting"
+	CONTAINER_STATUS_DELETE_FAILED      = "delete_failed"
 )
 
 const (

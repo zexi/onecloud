@@ -87,6 +87,7 @@ func (self *GuestDeleteTask) StartDeleteGuestSnapshots(ctx context.Context, gues
 }
 
 func (self *GuestDeleteTask) OnGuestStopComplete(ctx context.Context, guest *models.SGuest, data jsonutils.JSONObject) {
+	log.Infof("===call OnGuestStopComplete")
 	if jsonutils.QueryBoolean(self.Params, "delete_snapshots", false) {
 		self.SetStage("OnStartEipDissociate", nil)
 		guest.StartDeleteGuestSnapshots(ctx, self.UserCred, self.Id)

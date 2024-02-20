@@ -185,3 +185,20 @@ func (c *SContainer) StartSyncStatusTask(ctx context.Context, userCred mcclient.
 	}
 	return task.ScheduleRun(nil)
 }
+
+func (c *SContainer) CustomizeDelete(ctx context.Context, userCred mcclient.TokenCredential, query, data jsonutils.JSONObject) error {
+	return c.StartDeleteTask(ctx, userCred, "")
+}
+
+func (c *SContainer) StartDeleteTask(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error {
+	c.SetStatus(userCred, api.CONTAINER_STATUS_DELETING, "")
+	task, err := taskman.TaskManager.NewTask(ctx, "ContainerDeleteTask", c, userCred, nil, parentTaskId, "", nil)
+	if err != nil {
+		return errors.Wrap(err, "NewTask")
+	}
+	return task.ScheduleRun(nil)
+}
+
+func (c *SContainer) RealDelete(ctx context.Context, userCred mcclient.TokenCredential) error {
+	return c.SVirtualResourceBase.Delete(ctx, userCred)
+}

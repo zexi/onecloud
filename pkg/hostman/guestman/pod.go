@@ -151,7 +151,7 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 			Name:      s.GetDesc().Name,
 			Uid:       s.GetId(),
 			Namespace: s.GetDesc().TenantId,
-			Attempt:   0,
+			Attempt:   1,
 		},
 		Hostname:     s.GetDesc().Hostname,
 		LogDirectory: "",
@@ -330,19 +330,13 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		Image: &runtimeapi.ImageSpec{
 			Image: spec.Image,
 		},
-		Command:     spec.Command,
-		Args:        spec.Args,
-		WorkingDir:  "",
-		Envs:        nil,
-		Mounts:      nil,
-		Devices:     nil,
-		Labels:      nil,
-		Annotations: nil,
-		LogPath:     "",
-		Stdin:       false,
-		StdinOnce:   false,
-		Tty:         false,
-		Linux:       &runtimeapi.LinuxContainerConfig{},
+		Linux: &runtimeapi.LinuxContainerConfig{},
+	}
+	if len(spec.Command) != 0 {
+		ctrCfg.Command = spec.Command
+	}
+	if len(spec.Args) != 0 {
+		ctrCfg.Args = spec.Args
 	}
 	podCfg, err := s.getPodSandboxConfig()
 	if err != nil {
@@ -359,9 +353,31 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	return criId, nil
 }
 
-func (s *sPodGuestInstance) DeleteContainer(ctx context.Context, userCred mcclient.TokenCredential, id string) (jsonutils.JSONObject, error) {
-	//TODO implement me
-	panic("implement me")
+func (s *sPodGuestInstance) DeleteContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
+	criId, err := s.getContainerCRIId(ctrId)
+	if err != nil {
+		return nil, errors.Wrap(err, "getContainerCRIId")
+	}
+	go func() {
+		if err := s.deleteContainer(context.Background(), ctrId, criId); err != nil {
+			hostutils.TaskFailed(ctx, errors.Wrap(err, "deleteContainer").Error())
+			return
+		}
+		hostutils.TaskComplete(ctx, nil)
+	}()
+	return nil, nil
+}
+
+func (s *sPodGuestInstance) deleteContainer(ctx context.Context, ctrId string, criId string) error {
+	if err := s.getCRI().RemoveContainer(ctx, criId); err != nil {
+		return errors.Wrap(err, "cri.RemoveContainer")
+	}
+	// refresh local containers file
+	delete(s.containers, ctrId)
+	if err := s.saveContainersFile(s.containers); err != nil {
+		return errors.Wrap(err, "saveContainersFile")
+	}
+	return nil
 }
 
 func (s *sPodGuestInstance) SyncContainerStatus(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
