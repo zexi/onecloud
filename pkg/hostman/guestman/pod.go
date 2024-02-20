@@ -145,7 +145,31 @@ func (s *sPodGuestInstance) HandleGuestStart(ctx context.Context, userCred mccli
 	return nil, nil
 }
 
+func (s *sPodGuestInstance) getCreateParams() (jsonutils.JSONObject, error) {
+	createParamsStr, ok := s.GetDesc().Metadata[computeapi.VM_METADATA_CREATE_PARAMS]
+	if !ok {
+		return nil, errors.Errorf("not found %s in metadata", computeapi.VM_METADATA_CREATE_PARAMS)
+	}
+	return jsonutils.ParseString(createParamsStr)
+}
+
+func (s *sPodGuestInstance) getPodCreateParams() (*computeapi.PodCreateInput, error) {
+	createParams, err := s.getCreateParams()
+	if err != nil {
+		return nil, errors.Wrapf(err, "getCreateParams")
+	}
+	input := new(computeapi.PodCreateInput)
+	if err := createParams.Unmarshal(input, "pod"); err != nil {
+		return nil, errors.Wrapf(err, "unmarshal to pod creation input")
+	}
+	return input, nil
+}
+
 func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.TokenCredential) (*computeapi.PodStartResponse, error) {
+	podInput, err := s.getPodCreateParams()
+	if err != nil {
+		return nil, errors.Wrap(err, "getPodCreateParams")
+	}
 	podCfg := &runtimeapi.PodSandboxConfig{
 		Metadata: &runtimeapi.PodSandboxMetadata{
 			Name:      s.GetDesc().Name,
@@ -162,6 +186,30 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 		Linux:        nil,
 		Windows:      nil,
 	}
+
+	if len(podInput.PortMappings) != 0 {
+		podCfg.PortMappings = make([]*runtimeapi.PortMapping, len(podInput.PortMappings))
+		for idx := range podInput.PortMappings {
+			pm := podInput.PortMappings[idx]
+			runtimePm := &runtimeapi.PortMapping{
+				ContainerPort: pm.ContainerPort,
+				HostPort:      pm.HostPort,
+				HostIp:        pm.HostIp,
+			}
+			switch pm.Protocol {
+			case computeapi.PodPortMappingProtocolTCP:
+				runtimePm.Protocol = runtimeapi.Protocol_TCP
+			case computeapi.PodPortMappingProtocolUDP:
+				runtimePm.Protocol = runtimeapi.Protocol_UDP
+			case computeapi.PodPortMappingProtocolSCTP:
+				runtimePm.Protocol = runtimeapi.Protocol_SCTP
+			default:
+				return nil, errors.Errorf("invalid protocol: %q", pm.Protocol)
+			}
+			podCfg.PortMappings[idx] = runtimePm
+		}
+	}
+
 	criId, err := s.getCRI().RunPod(ctx, podCfg, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "cri.RunPod")

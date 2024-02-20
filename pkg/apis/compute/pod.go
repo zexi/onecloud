@@ -66,8 +66,24 @@ type PodContainerCreateInput struct {
 	ContainerSpec
 }
 
+type PodPortMappingProtocol string
+
+const (
+	PodPortMappingProtocolTCP  = "tcp"
+	PodPortMappingProtocolUDP  = "udp"
+	PodPortMappingProtocolSCTP = "sctp"
+)
+
+type PodPortMapping struct {
+	Protocol      PodPortMappingProtocol `json:"protocol"`
+	ContainerPort int32                  `json:"container_port"`
+	HostPort      int32                  `json:"host_port"`
+	HostIp        string                 `json:"host_ip"`
+}
+
 type PodCreateInput struct {
-	Containers []*PodContainerCreateInput `json:"containers"`
+	Containers   []*PodContainerCreateInput `json:"containers"`
+	PortMappings []*PodPortMapping          `json:"port_mappings"`
 }
 
 type PodStartResponse struct {

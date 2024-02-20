@@ -24,6 +24,7 @@ import (
 	"yunion.io/x/pkg/errors"
 	"yunion.io/x/pkg/util/httputils"
 	"yunion.io/x/pkg/util/rbacscope"
+	"yunion.io/x/pkg/util/sets"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/quotas"
@@ -74,6 +75,15 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 		}
 		sameName = ctr.Name
 	}
+
+	// validate port mappings
+	for idx, pm := range input.Pod.PortMappings {
+		// TODO: 判断 host port 是否重复
+		if err := p.validatePortMapping(pm); err != nil {
+			return nil, errors.Wrapf(err, "validate portmapping %d", idx)
+		}
+	}
+
 	// always set auto_start to true
 	input.AutoStart = true
 	return input, nil
@@ -85,6 +95,29 @@ func (p *SPodDriver) validateContainerData(idx int, defaultNamePrefix string, ct
 	}
 	if err := models.GetContainerManager().ValidateSpec(ctr.ContainerSpec); err != nil {
 		return errors.Wrap(err, "validate container spec")
+	}
+	return nil
+}
+
+func (p *SPodDriver) validatePortRange(port int32) error {
+	if port <= 0 || port > 65535 {
+		return httperrors.NewInputParameterError("port number %d isn't within 1 to 65535", port)
+	}
+	return nil
+}
+
+func (p *SPodDriver) validatePortMapping(pm *api.PodPortMapping) error {
+	if err := p.validatePortRange(pm.HostPort); err != nil {
+		return errors.Wrap(err, "validate host_port")
+	}
+	if err := p.validatePortRange(pm.ContainerPort); err != nil {
+		return errors.Wrap(err, "validate container_port")
+	}
+	if pm.Protocol == "" {
+		pm.Protocol = api.PodPortMappingProtocolTCP
+	}
+	if !sets.NewString(api.PodPortMappingProtocolSCTP, api.PodPortMappingProtocolUDP, api.PodPortMappingProtocolSCTP).Has(string(pm.Protocol)) {
+		return httperrors.NewInputParameterError("unsupported protocol %s", pm.Protocol)
 	}
 	return nil
 }
