@@ -58,8 +58,6 @@ type SContainer struct {
 
 	// GuestId is also the pod id
 	GuestId string `width:"36" charset:"ascii" create:"required" list:"user" index:"true"`
-	// Index is the container order of a pod
-	Index int `nullable:"false" default:"0" list:"user" update:"user"`
 	// Spec stores all container running options
 	Spec *api.ContainerSpec `length:"long" create:"required" list:"user"`
 }
@@ -129,7 +127,7 @@ func (m *SContainerManager) ValidateSpec(input api.ContainerSpec) error {
 	return nil
 }
 
-func (m *SContainerManager) GetContainerIndex(guestId string) (int, error) {
+/*func (m *SContainerManager) GetContainerIndex(guestId string) (int, error) {
 	cnt, err := m.Query("guest_id").Equals("guest_id", guestId).CountWithError()
 	if err != nil {
 		return -1, errors.Wrapf(err, "get container numbers of pod %s", guestId)
@@ -145,7 +143,7 @@ func (c *SContainer) CustomizeCreate(ctx context.Context, userCred mcclient.Toke
 	}
 	c.Index = idx
 	return nil
-}
+}*/
 
 func (c *SContainer) PostCreate(ctx context.Context, userCred mcclient.TokenCredential, ownerId mcclient.IIdentityProvider, query jsonutils.JSONObject, data jsonutils.JSONObject) {
 	c.SVirtualResourceBase.PostCreate(ctx, userCred, ownerId, query, data)

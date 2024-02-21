@@ -116,7 +116,7 @@ func (p *SPodDriver) validatePortMapping(pm *api.PodPortMapping) error {
 	if pm.Protocol == "" {
 		pm.Protocol = api.PodPortMappingProtocolTCP
 	}
-	if !sets.NewString(api.PodPortMappingProtocolSCTP, api.PodPortMappingProtocolUDP, api.PodPortMappingProtocolSCTP).Has(string(pm.Protocol)) {
+	if !sets.NewString(api.PodPortMappingProtocolSCTP, api.PodPortMappingProtocolUDP, api.PodPortMappingProtocolTCP).Has(string(pm.Protocol)) {
 		return httperrors.NewInputParameterError("unsupported protocol %s", pm.Protocol)
 	}
 	return nil

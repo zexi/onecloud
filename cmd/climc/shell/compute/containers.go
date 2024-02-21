@@ -22,6 +22,7 @@ import (
 
 func init() {
 	cmd := shell.NewResourceCmd(&modules.Containers)
+	cmd.Create(new(options.ContainerCreateOptions))
 	cmd.List(new(options.ContainerListOptions))
 	cmd.BatchDelete(new(options.ContainerDeleteOptions))
 }

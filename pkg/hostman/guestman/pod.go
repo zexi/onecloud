@@ -2,8 +2,10 @@ package guestman
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"path"
+	"path/filepath"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 
@@ -37,10 +39,9 @@ type sContainer struct {
 	CRIId string `json:"cri_id"`
 }
 
-func newContainer(id string, index int) *sContainer {
+func newContainer(id string) *sContainer {
 	return &sContainer{
-		Id:    id,
-		Index: index,
+		Id: id,
 	}
 }
 
@@ -165,6 +166,10 @@ func (s *sPodGuestInstance) getPodCreateParams() (*computeapi.PodCreateInput, er
 	return input, nil
 }
 
+func (s *sPodGuestInstance) getPodLogDir() string {
+	return filepath.Join(s.HomeDir(), "logs")
+}
+
 func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.TokenCredential) (*computeapi.PodStartResponse, error) {
 	podInput, err := s.getPodCreateParams()
 	if err != nil {
@@ -178,7 +183,7 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 			Attempt:   1,
 		},
 		Hostname:     s.GetDesc().Hostname,
-		LogDirectory: "",
+		LogDirectory: s.getPodLogDir(),
 		DnsConfig:    nil,
 		PortMappings: nil,
 		Labels:       nil,
@@ -323,12 +328,12 @@ func (s *sPodGuestInstance) getPodSandboxConfig() (*runtimeapi.PodSandboxConfig,
 	return podCfg, nil
 }
 
-func (s *sPodGuestInstance) saveContainer(id string, index int, criId string) error {
+func (s *sPodGuestInstance) saveContainer(id string, criId string) error {
 	_, ok := s.containers[id]
 	if ok {
 		return errors.Errorf("container %s already exists", criId)
 	}
-	ctr := newContainer(id, index)
+	ctr := newContainer(id)
 	ctr.CRIId = criId
 	s.containers[id] = ctr
 	if err := s.saveContainersFile(s.containers); err != nil {
@@ -369,6 +374,10 @@ func (s *sPodGuestInstance) CreateContainer(ctx context.Context, userCred mcclie
 	return nil, nil
 }
 
+func (s *sPodGuestInstance) getContainerLogPath(ctrId string) string {
+	return filepath.Join(fmt.Sprintf("%s.log", ctrId))
+}
+
 func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (string, error) {
 	spec := input.Spec
 	ctrCfg := &runtimeapi.ContainerConfig{
@@ -378,7 +387,8 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		Image: &runtimeapi.ImageSpec{
 			Image: spec.Image,
 		},
-		Linux: &runtimeapi.LinuxContainerConfig{},
+		Linux:   &runtimeapi.LinuxContainerConfig{},
+		LogPath: s.getContainerLogPath(ctrId),
 	}
 	if len(spec.Command) != 0 {
 		ctrCfg.Command = spec.Command
@@ -394,8 +404,7 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	if err != nil {
 		return "", errors.Wrap(err, "cri.CreateContainer")
 	}
-	// TODO: 设置 index
-	if err := s.saveContainer(ctrId, 0, criId); err != nil {
+	if err := s.saveContainer(ctrId, criId); err != nil {
 		return "", errors.Wrap(err, "saveContainer")
 	}
 	return criId, nil
