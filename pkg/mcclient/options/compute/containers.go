@@ -79,3 +79,16 @@ func parseContainerEnv(env string) (*computeapi.ContainerKeyValue, error) {
 		Value: kv[1],
 	}, nil
 }
+
+type ContainerStopOptions struct {
+	ServerIdsOptions
+	Timeout int `help:"Stopping timeout" json:"timeout"`
+}
+
+func (o *ContainerStopOptions) Params() (jsonutils.JSONObject, error) {
+	return jsonutils.Marshal(o), nil
+}
+
+type ContainerStartOptions struct {
+	ServerIdsOptions
+}

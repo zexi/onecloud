@@ -19,6 +19,7 @@ type IPodDriver interface {
 
 	RequestCreateContainer(ctx context.Context, userCred mcclient.TokenCredential, task IContainerTask) error
 	RequestStartContainer(ctx context.Context, userCred mcclient.TokenCredential, task IContainerTask) error
+	RequestStopContainer(ctx context.Context, userCred mcclient.TokenCredential, task IContainerTask) error
 	RequestDeleteContainer(ctx context.Context, userCred mcclient.TokenCredential, task IContainerTask) error
-	RequestSyncContainerStatus(ctx context.Context, cred mcclient.TokenCredential, task IContainerTask) error
+	RequestSyncContainerStatus(ctx context.Context, userCred mcclient.TokenCredential, task IContainerTask) error
 }

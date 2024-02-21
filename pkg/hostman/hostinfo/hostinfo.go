@@ -839,10 +839,10 @@ func (h *SHostInfo) detectKernelVersion() {
 func (h *SHostInfo) detectSyssoftwareInfo() error {
 	h.detectOsDist()
 	h.detectKernelVersion()
-	if err := h.detectQemuVersion(); err != nil {
+	/*if err := h.detectQemuVersion(); err != nil {
 		log.Errorf("detect qemu version: %s", err.Error())
 		h.AppendHostError(fmt.Sprintf("detect qemu version: %s", err.Error()))
-	}
+	}*/
 	h.detectOvsVersion()
 	if err := h.detectOvsKOVersion(); err != nil {
 		log.Errorf("detect ovs kernel version: %s", err.Error())
@@ -1107,10 +1107,10 @@ func (h *SHostInfo) register() {
 	if err != nil {
 		h.onFail(errors.Wrap(err, "initHostNetworks"))
 	}
-	err = h.initIsolatedDevices()
-	if err != nil {
-		h.onFail(errors.Wrap(err, "initIsolatedDevices"))
-	}
+	//err = h.initIsolatedDevices()
+	//if err != nil {
+	//	h.onFail(errors.Wrap(err, "initIsolatedDevices"))
+	//}
 	err = h.initStorages()
 	if err != nil {
 		h.onFail(errors.Wrap(err, "initStorages"))

@@ -24,6 +24,12 @@ const (
 
 type containerActionFunc func(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, containerId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
 
+type containerDelayActionParams struct {
+	pod         guestman.PodInstance
+	containerId string
+	body        jsonutils.JSONObject
+}
+
 func containerActionHandler(cf containerActionFunc) appsrv.FilterHandler {
 	return auth.Authenticate(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		params, _, body := appsrv.FetchEnv(ctx, w, r)
@@ -43,14 +49,16 @@ func containerActionHandler(cf containerActionFunc) appsrv.FilterHandler {
 			hostutils.Response(ctx, w, httperrors.NewBadRequestError("runtime instance is %#v", podObj))
 			return
 		}
-		resp, err := cf(ctx, userCred, pod, ctrId, body)
-		if err != nil {
-			hostutils.Response(ctx, w, err)
-		} else if resp != nil {
-			hostutils.Response(ctx, w, resp)
-		} else {
-			hostutils.ResponseOk(ctx, w)
+		delayParams := &containerDelayActionParams{
+			pod:         pod,
+			containerId: ctrId,
+			body:        body,
 		}
+		hostutils.DelayTask(ctx, func(ctx context.Context, params interface{}) (jsonutils.JSONObject, error) {
+			dp := params.(*containerDelayActionParams)
+			return cf(ctx, userCred, dp.pod, dp.containerId, dp.body)
+		}, delayParams)
+		hostutils.ResponseOk(ctx, w)
 	})
 }
 
@@ -58,6 +66,7 @@ func AddPodHandlers(prefix string, app *appsrv.Application) {
 	ctrHandlers := map[string]containerActionFunc{
 		"create":      createContainer,
 		"start":       startContainer,
+		"stop":        stopContainer,
 		"delete":      deleteContainer,
 		"sync-status": syncContainerStatus,
 	}
@@ -77,7 +86,15 @@ func createContainer(ctx context.Context, userCred mcclient.TokenCredential, pod
 }
 
 func startContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, containerId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
-	return pod.StartContainer(ctx, userCred, containerId)
+	input := new(api.ContainerCreateInput)
+	if err := body.Unmarshal(input); err != nil {
+		return nil, errors.Wrap(err, "unmarshal to ContainerCreateInput")
+	}
+	return pod.StartContainer(ctx, userCred, containerId, input)
+}
+
+func stopContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
+	return pod.StopContainer(ctx, userCred, ctrId, body)
 }
 
 func deleteContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, containerId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {

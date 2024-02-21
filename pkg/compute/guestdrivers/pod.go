@@ -282,18 +282,29 @@ func (p *SPodDriver) performContainerAction(ctx context.Context, userCred mcclie
 	return err
 }
 
-func (p *SPodDriver) RequestCreateContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
-	ctr := task.GetContainer()
+func (p *SPodDriver) getContainerCreateInput(ctr *models.SContainer) *api.ContainerCreateInput {
 	input := &api.ContainerCreateInput{
-		GuestId: task.GetPod().GetId(),
+		GuestId: ctr.GuestId,
 		Spec:    *ctr.Spec,
 	}
 	input.Name = ctr.GetName()
+	return input
+}
+
+func (p *SPodDriver) RequestCreateContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
+	ctr := task.GetContainer()
+	input := p.getContainerCreateInput(ctr)
 	return p.performContainerAction(ctx, userCred, task, "create", jsonutils.Marshal(input))
 }
 
 func (p *SPodDriver) RequestStartContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
-	return p.performContainerAction(ctx, userCred, task, "start", nil)
+	ctr := task.GetContainer()
+	input := p.getContainerCreateInput(ctr)
+	return p.performContainerAction(ctx, userCred, task, "start", jsonutils.Marshal(input))
+}
+
+func (p *SPodDriver) RequestStopContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
+	return p.performContainerAction(ctx, userCred, task, "stop", task.GetParams())
 }
 
 func (p *SPodDriver) RequestDeleteContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {

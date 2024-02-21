@@ -35,11 +35,12 @@ func main() {
 	// create container
 	podCfg := &runtimeapi.PodSandboxConfig{
 		Metadata: &runtimeapi.PodSandboxMetadata{
-			Name:      "test-pod5",
+			Name:      "test-gpu",
 			Uid:       "e25e38ef-fe98-4993-8641-699cd0530fc0",
 			Namespace: "27c9464ab54947328a29298761895be3",
+			Attempt:   1,
 		},
-		Hostname:     "test-pod-5",
+		Hostname:     "test-gpu",
 		LogDirectory: "",
 		DnsConfig:    nil,
 		PortMappings: nil,
@@ -51,16 +52,34 @@ func main() {
 	ctrCfgs := []*runtimeapi.ContainerConfig{
 		{
 			Metadata: &runtimeapi.ContainerMetadata{
-				Name: "contrainer-logger",
+				Name: "nvidia-smi",
 			},
 			Image: &runtimeapi.ImageSpec{
-				Image: "nginx",
+				Image: "docker.io/nvidia/cuda:12.3.1-base-ubuntu20.04",
 			},
-			Linux: &runtimeapi.LinuxContainerConfig{
+			Command: []string{"nvidia-smi"},
+			Linux:   &runtimeapi.LinuxContainerConfig{
 				//SecurityContext: &runtimeapi.LinuxContainerSecurityContext{
 				//	Privileged: true,
 				//},
 			},
+			Envs: []*runtimeapi.KeyValue{
+				{
+					Key:   "NVIDIA_VISIBLE_DEVICES",
+					Value: "all",
+				},
+				{
+					Key:   "NVIDIA_DRIVER_CAPABILITIES",
+					Value: "compute,utility",
+				},
+			},
+			/*Devices: []*runtimeapi.Device{
+				{
+					HostPath:      "/dev/nvidia0",
+					ContainerPath: "/dev/nvidia0",
+					Permissions:   "rwm",
+				},
+			},*/
 		},
 	}
 	resp, err := ctl.RunContainers(ctx, podCfg, ctrCfgs, "")

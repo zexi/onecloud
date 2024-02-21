@@ -34,6 +34,7 @@ type PodCreateOptions struct {
 	VcpuCount   int      `help:"#CPU cores of VM server, default 1" default:"1" metavar:"<SERVER_CPU_COUNT>" json:"vcpu_count" token:"ncpu"`
 	AllowDelete *bool    `help:"Unlock server to allow deleting" json:"-"`
 	PortMapping []string `help:"Port mapping of the pod and the format is: <host_port>:<container_port>/<tcp|udp>" short-token:"p"`
+	Arch        string   `help:"image arch" choices:"aarch64|x86_64"`
 
 	ServerCreateCommonConfig
 }
@@ -127,6 +128,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	} else {
 		return nil, fmt.Errorf("Invalid memory input: %q", o.MEM)
 	}
+	params.OsArch = o.Arch
 	params.Name = o.NAME
 	return params, nil
 }

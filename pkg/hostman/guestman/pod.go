@@ -17,6 +17,7 @@ import (
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils"
 	"yunion.io/x/onecloud/pkg/hostman/options"
+	"yunion.io/x/onecloud/pkg/httperrors"
 	"yunion.io/x/onecloud/pkg/mcclient"
 	"yunion.io/x/onecloud/pkg/mcclient/auth"
 	computemod "yunion.io/x/onecloud/pkg/mcclient/modules/compute"
@@ -28,9 +29,10 @@ type PodInstance interface {
 	GuestRuntimeInstance
 
 	CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error)
-	StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error)
+	StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error)
 	DeleteContainer(ctx context.Context, cred mcclient.TokenCredential, id string) (jsonutils.JSONObject, error)
 	SyncContainerStatus(ctx context.Context, cred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error)
+	StopContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
 }
 
 type sContainer struct {
@@ -99,7 +101,7 @@ func (s *sPodGuestInstance) getPod(ctx context.Context) (*runtimeapi.PodSandbox,
 			return p, nil
 		}
 	}
-	return nil, errors.Errorf("Not found pod from containerd")
+	return nil, errors.Wrap(httperrors.ErrNotFound, "Not found pod from containerd")
 }
 
 func (s *sPodGuestInstance) IsRunning() bool {
@@ -135,14 +137,13 @@ func (s *sPodGuestInstance) HandleGuestStatus(ctx context.Context, status string
 }
 
 func (s *sPodGuestInstance) HandleGuestStart(ctx context.Context, userCred mcclient.TokenCredential, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
-	go func() {
+	hostutils.DelayTask(ctx, func(ctx context.Context, params interface{}) (jsonutils.JSONObject, error) {
 		resp, err := s.startPod(context.Background(), userCred)
 		if err != nil {
-			hostutils.TaskFailed(ctx, err.Error())
-			return
+			return nil, errors.Wrap(err, "startPod")
 		}
-		hostutils.TaskComplete(ctx, jsonutils.Marshal(resp))
-	}()
+		return jsonutils.Marshal(resp), nil
+	}, nil)
 	return nil, nil
 }
 
@@ -269,19 +270,55 @@ func (s *sPodGuestInstance) getContainerCRIId(ctrId string) (string, error) {
 	return ctr.CRIId, nil
 }
 
-func (s *sPodGuestInstance) StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
-	go func() {
-		criId, err := s.getContainerCRIId(ctrId)
+func (s *sPodGuestInstance) StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
+	_, hasCtr := s.containers[ctrId]
+	needRecreate := false
+	if hasCtr {
+		status, err := s.getContainerStatus(ctx, ctrId)
 		if err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "get container cri id").Error())
-			return
+			return nil, errors.Wrap(err, "get container status")
 		}
-		if err := s.getCRI().StartContainer(context.Background(), criId); err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "CRI.StartContainer").Error())
-			return
+		if status == computeapi.CONTAINER_STATUS_EXITED {
+			needRecreate = true
+		} else if status != computeapi.CONTAINER_STATUS_CREATED {
+			return nil, errors.Wrapf(err, "can't start container when status is %s", status)
 		}
-		hostutils.TaskComplete(ctx, nil)
-	}()
+	}
+	if !hasCtr || needRecreate {
+		log.Infof("recreate container %s before starting. hasCtr: %v, needRecreate: %v", ctrId, hasCtr, needRecreate)
+		// delete and recreate the container before starting
+		if hasCtr {
+			if _, err := s.DeleteContainer(ctx, userCred, ctrId); err != nil {
+				return nil, errors.Wrap(err, "delete container before starting")
+			}
+		}
+		if _, err := s.CreateContainer(ctx, userCred, ctrId, input); err != nil {
+			return nil, errors.Wrap(err, "recreate container before starting")
+		}
+	}
+
+	criId, err := s.getContainerCRIId(ctrId)
+	if err != nil {
+		return nil, errors.Wrap(err, "get container cri id")
+	}
+	if err := s.getCRI().StartContainer(ctx, criId); err != nil {
+		return nil, errors.Wrap(err, "CRI.StartContainer")
+	}
+	return nil, nil
+}
+
+func (s *sPodGuestInstance) StopContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
+	criId, err := s.getContainerCRIId(ctrId)
+	if err != nil {
+		return nil, errors.Wrap(err, "get container cri id")
+	}
+	var timeout int64 = 0
+	if body.Contains("timeout") {
+		timeout, _ = body.Int("timeout")
+	}
+	if err := s.getCRI().StopContainer(context.Background(), criId, timeout); err != nil {
+		return nil, errors.Wrap(err, "CRI.StopContainer")
+	}
 	return nil, nil
 }
 
@@ -311,12 +348,11 @@ func (s *sPodGuestInstance) setContainerCRIInfo(ctx context.Context, userCred mc
 	})); err != nil {
 		return errors.Wrapf(err, "set cri_id of container %s", ctrId)
 	}
-	// TODO: 添加本地容器和 cri id 对应关系
 	return nil
 }
 
 func (s *sPodGuestInstance) getPodSandboxConfig() (*runtimeapi.PodSandboxConfig, error) {
-	cfgStr := s.Desc.Metadata[computeapi.POD_METADATA_CRI_CONFIG]
+	cfgStr := s.GetSourceDesc().Metadata[computeapi.POD_METADATA_CRI_CONFIG]
 	obj, err := jsonutils.ParseString(cfgStr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "ParseString to json object: %s", cfgStr)
@@ -359,18 +395,13 @@ func (s *sPodGuestInstance) getContainer(id string) *sContainer {
 }
 
 func (s *sPodGuestInstance) CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
-	go func() {
-		ctrCriId, err := s.createContainer(context.Background(), userCred, id, input)
-		if err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "CRI.CreateContainer").Error())
-			return
-		}
-		if err := s.setContainerCRIInfo(ctx, userCred, id, ctrCriId); err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "setContainerCRIInfo").Error())
-			return
-		}
-		hostutils.TaskComplete(ctx, nil)
-	}()
+	ctrCriId, err := s.createContainer(ctx, userCred, id, input)
+	if err != nil {
+		return nil, errors.Wrap(err, "CRI.CreateContainer")
+	}
+	if err := s.setContainerCRIInfo(ctx, userCred, id, ctrCriId); err != nil {
+		return nil, errors.Wrap(err, "setContainerCRIInfo")
+	}
 	return nil, nil
 }
 
@@ -389,6 +420,23 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		},
 		Linux:   &runtimeapi.LinuxContainerConfig{},
 		LogPath: s.getContainerLogPath(ctrId),
+		Envs: []*runtimeapi.KeyValue{
+			{
+				Key:   "NVIDIA_VISIBLE_DEVICES",
+				Value: "all",
+			},
+			{
+				Key:   "NVIDIA_DRIVER_CAPABILITIES",
+				Value: "compute,utility",
+			},
+		},
+		Devices: []*runtimeapi.Device{
+			//{
+			//	ContainerPath: "/dev/dri/renderD128",
+			//	HostPath:      "/dev/dri/renderD128",
+			//	Permissions:   "rwm",
+			//},
+		},
 	}
 	if len(spec.Command) != 0 {
 		ctrCfg.Command = spec.Command
@@ -415,48 +463,25 @@ func (s *sPodGuestInstance) DeleteContainer(ctx context.Context, userCred mcclie
 	if err != nil {
 		return nil, errors.Wrap(err, "getContainerCRIId")
 	}
-	go func() {
-		if err := s.deleteContainer(context.Background(), ctrId, criId); err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "deleteContainer").Error())
-			return
-		}
-		hostutils.TaskComplete(ctx, nil)
-	}()
-	return nil, nil
-}
-
-func (s *sPodGuestInstance) deleteContainer(ctx context.Context, ctrId string, criId string) error {
 	if err := s.getCRI().RemoveContainer(ctx, criId); err != nil {
-		return errors.Wrap(err, "cri.RemoveContainer")
+		return nil, errors.Wrap(err, "cri.RemoveContainer")
 	}
 	// refresh local containers file
 	delete(s.containers, ctrId)
 	if err := s.saveContainersFile(s.containers); err != nil {
-		return errors.Wrap(err, "saveContainersFile")
+		return nil, errors.Wrap(err, "saveContainersFile")
 	}
-	return nil
-}
-
-func (s *sPodGuestInstance) SyncContainerStatus(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
-	go func() {
-		resp, err := s.syncContainerStatus(context.Background(), userCred, ctrId)
-		if err != nil {
-			hostutils.TaskFailed(ctx, errors.Wrap(err, "sync container status").Error())
-			return
-		}
-		hostutils.TaskComplete(ctx, resp)
-	}()
 	return nil, nil
 }
 
-func (s *sPodGuestInstance) syncContainerStatus(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
+func (s *sPodGuestInstance) getContainerStatus(ctx context.Context, ctrId string) (string, error) {
 	criId, err := s.getContainerCRIId(ctrId)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get container cri_id by %s", ctrId)
+		return "", errors.Wrapf(err, "get container cri_id by %s", ctrId)
 	}
 	resp, err := s.getCRI().ContainerStatus(ctx, criId)
 	if err != nil {
-		return nil, errors.Wrap(err, "cri.ContainerStatus")
+		return "", errors.Wrap(err, "cri.ContainerStatus")
 	}
 	status := computeapi.CONTAINER_STATUS_UNKNOWN
 	switch resp.Status.State {
@@ -468,6 +493,14 @@ func (s *sPodGuestInstance) syncContainerStatus(ctx context.Context, userCred mc
 		status = computeapi.CONTAINER_STATUS_EXITED
 	case runtimeapi.ContainerState_CONTAINER_UNKNOWN:
 		status = computeapi.CONTAINER_STATUS_UNKNOWN
+	}
+	return status, nil
+}
+
+func (s *sPodGuestInstance) SyncContainerStatus(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
+	status, err := s.getContainerStatus(ctx, ctrId)
+	if err != nil {
+		return nil, errors.Wrap(err, "get container status")
 	}
 	return jsonutils.Marshal(computeapi.ContainerSyncStatusResponse{Status: status}), nil
 }
