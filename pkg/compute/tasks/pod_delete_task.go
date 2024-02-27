@@ -25,6 +25,7 @@ import (
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
 	"yunion.io/x/onecloud/pkg/compute/guestdrivers"
 	"yunion.io/x/onecloud/pkg/compute/models"
+	"yunion.io/x/onecloud/pkg/httperrors"
 )
 
 type PodDeleteTask struct {
@@ -63,6 +64,10 @@ func (t *PodDeleteTask) OnContainerDeleted(ctx context.Context, pod *models.SGue
 	t.SetStage("OnPodUndeploy", nil)
 	host, _ := pod.GetHost()
 	if err := pod.GetDriver().(*guestdrivers.SPodDriver).RequestUndeployPod(ctx, pod, host, t); err != nil {
+		if errors.Cause(err) == httperrors.ErrNotFound {
+			t.OnPodUndeploy(ctx, pod, nil)
+			return
+		}
 		t.OnPodUndeployFailed(ctx, pod, jsonutils.NewString(err.Error()))
 		return
 	}

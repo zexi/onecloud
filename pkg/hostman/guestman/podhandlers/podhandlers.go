@@ -8,7 +8,7 @@ import (
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/pkg/errors"
 
-	api "yunion.io/x/onecloud/pkg/apis/compute"
+	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/appsrv"
 	"yunion.io/x/onecloud/pkg/hostman/guestman"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils"
@@ -78,7 +78,7 @@ func AddPodHandlers(prefix string, app *appsrv.Application) {
 }
 
 func createContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, id string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
-	input := new(api.ContainerCreateInput)
+	input := new(hostapi.ContainerCreateInput)
 	if err := body.Unmarshal(input); err != nil {
 		return nil, errors.Wrap(err, "unmarshal to ContainerCreateInput")
 	}
@@ -86,7 +86,7 @@ func createContainer(ctx context.Context, userCred mcclient.TokenCredential, pod
 }
 
 func startContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, containerId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
-	input := new(api.ContainerCreateInput)
+	input := new(hostapi.ContainerCreateInput)
 	if err := body.Unmarshal(input); err != nil {
 		return nil, errors.Wrap(err, "unmarshal to ContainerCreateInput")
 	}

@@ -53,6 +53,7 @@ import (
 	"yunion.io/x/onecloud/pkg/hostman/hostutils/hardware"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils/kubelet"
 	"yunion.io/x/onecloud/pkg/hostman/isolated_device"
+	_ "yunion.io/x/onecloud/pkg/hostman/isolated_device/container_device"
 	"yunion.io/x/onecloud/pkg/hostman/monitor"
 	"yunion.io/x/onecloud/pkg/hostman/options"
 	"yunion.io/x/onecloud/pkg/hostman/storageman"
@@ -116,6 +117,10 @@ type SHostInfo struct {
 	IoScheduler string
 
 	cri pod.CRI
+}
+
+func (h *SHostInfo) GetContainerDeviceConfigurationFilePath() string {
+	return options.HostOptions.ContainerDeviceConfigFile
 }
 
 func (h *SHostInfo) GetIsolatedDeviceManager() isolated_device.IsolatedDeviceManager {
@@ -1107,10 +1112,10 @@ func (h *SHostInfo) register() {
 	if err != nil {
 		h.onFail(errors.Wrap(err, "initHostNetworks"))
 	}
-	//err = h.initIsolatedDevices()
-	//if err != nil {
-	//	h.onFail(errors.Wrap(err, "initIsolatedDevices"))
-	//}
+	err = h.initIsolatedDevices()
+	if err != nil {
+		h.onFail(errors.Wrap(err, "initIsolatedDevices"))
+	}
 	err = h.initStorages()
 	if err != nil {
 		h.onFail(errors.Wrap(err, "initStorages"))

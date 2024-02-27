@@ -20,6 +20,7 @@ import (
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/pkg/errors"
 
+	"yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/mcclient/options"
 )
@@ -51,11 +52,13 @@ func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
 	req := computeapi.ContainerCreateInput{
 		GuestId: o.PODID,
 		Spec: computeapi.ContainerSpec{
-			Image:      o.IMAGE,
-			Command:    o.Command,
-			Args:       o.Args,
-			WorkingDir: o.WorkingDir,
-			Envs:       make([]*computeapi.ContainerKeyValue, 0),
+			ContainerSpec: apis.ContainerSpec{
+				Image:      o.IMAGE,
+				Command:    o.Command,
+				Args:       o.Args,
+				WorkingDir: o.WorkingDir,
+				Envs:       make([]*apis.ContainerKeyValue, 0),
+			},
 		},
 	}
 	req.Name = o.NAME
@@ -69,12 +72,12 @@ func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
 	return jsonutils.Marshal(req), nil
 }
 
-func parseContainerEnv(env string) (*computeapi.ContainerKeyValue, error) {
+func parseContainerEnv(env string) (*apis.ContainerKeyValue, error) {
 	kv := strings.Split(env, "=")
 	if len(kv) != 2 {
 		return nil, errors.Errorf("invalid env: %q", env)
 	}
-	return &computeapi.ContainerKeyValue{
+	return &apis.ContainerKeyValue{
 		Key:   kv[0],
 		Value: kv[1],
 	}, nil

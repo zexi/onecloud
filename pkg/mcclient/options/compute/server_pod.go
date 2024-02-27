@@ -23,6 +23,7 @@ import (
 	"yunion.io/x/pkg/util/fileutils"
 	"yunion.io/x/pkg/util/regutils"
 
+	"yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/mcclient/options"
 )
@@ -105,11 +106,13 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 			Containers: []*computeapi.PodContainerCreateInput{
 				{
 					ContainerSpec: computeapi.ContainerSpec{
-						Image:      o.IMAGE,
-						Command:    nil,
-						Args:       nil,
-						WorkingDir: "",
-						Envs:       nil,
+						ContainerSpec: apis.ContainerSpec{
+							Image:      o.IMAGE,
+							Command:    nil,
+							Args:       nil,
+							WorkingDir: "",
+							Envs:       nil,
+						},
 					},
 				},
 			},
@@ -127,6 +130,9 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		params.VmemSize = memSize
 	} else {
 		return nil, fmt.Errorf("Invalid memory input: %q", o.MEM)
+	}
+	for _, dev := range o.IsolatedDevice {
+		params.Pod.Containers[0].Devices = append(params.Pod.Containers[0].Devices, &computeapi.ContainerDevice{IsolatedDeviceId: dev})
 	}
 	params.OsArch = o.Arch
 	params.Name = o.NAME

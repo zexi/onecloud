@@ -14,8 +14,10 @@ import (
 	"yunion.io/x/pkg/errors"
 
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
+	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils"
+	"yunion.io/x/onecloud/pkg/hostman/isolated_device"
 	"yunion.io/x/onecloud/pkg/hostman/options"
 	"yunion.io/x/onecloud/pkg/httperrors"
 	"yunion.io/x/onecloud/pkg/mcclient"
@@ -28,8 +30,8 @@ import (
 type PodInstance interface {
 	GuestRuntimeInstance
 
-	CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error)
-	StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error)
+	CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *hostapi.ContainerCreateInput) (jsonutils.JSONObject, error)
+	StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerCreateInput) (jsonutils.JSONObject, error)
 	DeleteContainer(ctx context.Context, cred mcclient.TokenCredential, id string) (jsonutils.JSONObject, error)
 	SyncContainerStatus(ctx context.Context, cred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error)
 	StopContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
@@ -270,7 +272,7 @@ func (s *sPodGuestInstance) getContainerCRIId(ctrId string) (string, error) {
 	return ctr.CRIId, nil
 }
 
-func (s *sPodGuestInstance) StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
+func (s *sPodGuestInstance) StartContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
 	_, hasCtr := s.containers[ctrId]
 	needRecreate := false
 	if hasCtr {
@@ -394,7 +396,7 @@ func (s *sPodGuestInstance) getContainer(id string) *sContainer {
 	return s.containers[id]
 }
 
-func (s *sPodGuestInstance) CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *computeapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
+func (s *sPodGuestInstance) CreateContainer(ctx context.Context, userCred mcclient.TokenCredential, id string, input *hostapi.ContainerCreateInput) (jsonutils.JSONObject, error) {
 	ctrCriId, err := s.createContainer(ctx, userCred, id, input)
 	if err != nil {
 		return nil, errors.Wrap(err, "CRI.CreateContainer")
@@ -409,7 +411,7 @@ func (s *sPodGuestInstance) getContainerLogPath(ctrId string) string {
 	return filepath.Join(fmt.Sprintf("%s.log", ctrId))
 }
 
-func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *computeapi.ContainerCreateInput) (string, error) {
+func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerCreateInput) (string, error) {
 	spec := input.Spec
 	ctrCfg := &runtimeapi.ContainerConfig{
 		Metadata: &runtimeapi.ContainerMetadata{
@@ -420,16 +422,7 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		},
 		Linux:   &runtimeapi.LinuxContainerConfig{},
 		LogPath: s.getContainerLogPath(ctrId),
-		Envs: []*runtimeapi.KeyValue{
-			{
-				Key:   "NVIDIA_VISIBLE_DEVICES",
-				Value: "all",
-			},
-			{
-				Key:   "NVIDIA_DRIVER_CAPABILITIES",
-				Value: "compute,utility",
-			},
-		},
+		Envs:    []*runtimeapi.KeyValue{},
 		Devices: []*runtimeapi.Device{
 			//{
 			//	ContainerPath: "/dev/dri/renderD128",
@@ -437,6 +430,19 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 			//	Permissions:   "rwm",
 			//},
 		},
+	}
+	if len(spec.Devices) != 0 {
+		for _, dev := range spec.Devices {
+			man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.Type))
+			if err != nil {
+				return "", errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
+			}
+			ctrDev, err := man.NewContainerDevice(dev)
+			if err != nil {
+				return "", errors.Wrapf(err, "NewContainerDevice with %#v", dev)
+			}
+			ctrCfg.Devices = append(ctrCfg.Devices, ctrDev)
+		}
 	}
 	if len(spec.Command) != 0 {
 		ctrCfg.Command = spec.Command

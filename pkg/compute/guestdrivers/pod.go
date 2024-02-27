@@ -27,6 +27,7 @@ import (
 	"yunion.io/x/pkg/util/sets"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
+	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/quotas"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
 	"yunion.io/x/onecloud/pkg/compute/models"
@@ -67,7 +68,7 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 	}
 	sameName := ""
 	for idx, ctr := range input.Pod.Containers {
-		if err := p.validateContainerData(idx, input.Name, ctr); err != nil {
+		if err := p.validateContainerData(userCred, idx, input.Name, ctr); err != nil {
 			return nil, errors.Wrapf(err, "data of %d container", idx)
 		}
 		if ctr.Name == sameName {
@@ -89,11 +90,11 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 	return input, nil
 }
 
-func (p *SPodDriver) validateContainerData(idx int, defaultNamePrefix string, ctr *api.PodContainerCreateInput) error {
+func (p *SPodDriver) validateContainerData(userCred mcclient.TokenCredential, idx int, defaultNamePrefix string, ctr *api.PodContainerCreateInput) error {
 	if ctr.Name == "" {
 		ctr.Name = fmt.Sprintf("%s-%d", defaultNamePrefix, idx)
 	}
-	if err := models.GetContainerManager().ValidateSpec(ctr.ContainerSpec); err != nil {
+	if err := models.GetContainerManager().ValidateSpec(userCred, &ctr.ContainerSpec); err != nil {
 		return errors.Wrap(err, "validate container spec")
 	}
 	return nil
@@ -282,24 +283,34 @@ func (p *SPodDriver) performContainerAction(ctx context.Context, userCred mcclie
 	return err
 }
 
-func (p *SPodDriver) getContainerCreateInput(ctr *models.SContainer) *api.ContainerCreateInput {
-	input := &api.ContainerCreateInput{
-		GuestId: ctr.GuestId,
-		Spec:    *ctr.Spec,
+func (p *SPodDriver) getContainerCreateInput(ctr *models.SContainer) (*hostapi.ContainerCreateInput, error) {
+	spec, err := ctr.ToHostContainerSpec()
+	if err != nil {
+		return nil, errors.Wrap(err, "ToHostContainerSpec")
 	}
-	input.Name = ctr.GetName()
-	return input
+	input := &hostapi.ContainerCreateInput{
+		Name:    ctr.GetName(),
+		GuestId: ctr.GuestId,
+		Spec:    spec,
+	}
+	return input, nil
 }
 
 func (p *SPodDriver) RequestCreateContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
 	ctr := task.GetContainer()
-	input := p.getContainerCreateInput(ctr)
+	input, err := p.getContainerCreateInput(ctr)
+	if err != nil {
+		return errors.Wrap(err, "getContainerCreateInput")
+	}
 	return p.performContainerAction(ctx, userCred, task, "create", jsonutils.Marshal(input))
 }
 
 func (p *SPodDriver) RequestStartContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
 	ctr := task.GetContainer()
-	input := p.getContainerCreateInput(ctr)
+	input, err := p.getContainerCreateInput(ctr)
+	if err != nil {
+		return errors.Wrap(err, "getContainerCreateInput")
+	}
 	return p.performContainerAction(ctx, userCred, task, "start", jsonutils.Marshal(input))
 }
 

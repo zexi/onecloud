@@ -24,6 +24,7 @@ import (
 	"yunion.io/x/sqlchemy"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
+	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
 	"yunion.io/x/onecloud/pkg/httperrors"
@@ -118,13 +119,25 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 		return nil, errors.Wrapf(err, "fetch guest by %s", input.GuestId)
 	}
 	input.GuestId = obj.GetId()
-	if err := m.ValidateSpec(input.Spec); err != nil {
+	if err := m.ValidateSpec(userCred, &input.Spec); err != nil {
 		return nil, errors.Wrap(err, "validate spec")
 	}
 	return input, nil
 }
 
-func (m *SContainerManager) ValidateSpec(input api.ContainerSpec) error {
+func (m *SContainerManager) ValidateSpec(userCred mcclient.TokenCredential, input *api.ContainerSpec) error {
+	for _, dev := range input.Devices {
+		devId := dev.IsolatedDeviceId
+		devObj, err := IsolatedDeviceManager.FetchByIdOrName(userCred, devId)
+		if err != nil {
+			return errors.Wrapf(err, "fetch isolated device by %q", devId)
+		}
+		devType := devObj.(*SIsolatedDevice).DevType
+		if !sets.NewString(api.VALID_CONTAINER_DEVICE_TYPES...).Has(devType) {
+			return httperrors.NewInputParameterError("device type %s is not supported by container", devType)
+		}
+		dev.IsolatedDeviceId = devObj.GetId()
+	}
 	return nil
 }
 
@@ -223,4 +236,25 @@ func (c *SContainer) StartDeleteTask(ctx context.Context, userCred mcclient.Toke
 
 func (c *SContainer) RealDelete(ctx context.Context, userCred mcclient.TokenCredential) error {
 	return c.SVirtualResourceBase.Delete(ctx, userCred)
+}
+
+func (c *SContainer) ToHostContainerSpec() (*hostapi.ContainerSpec, error) {
+	hSpec := &hostapi.ContainerSpec{
+		ContainerSpec: c.Spec.ContainerSpec,
+	}
+	for _, dev := range c.Spec.Devices {
+		isoDevObj, err := IsolatedDeviceManager.FetchById(dev.IsolatedDeviceId)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Fetch isolated device by id", dev.IsolatedDeviceId)
+		}
+		isoDev := isoDevObj.(*SIsolatedDevice)
+		ctrDev := &hostapi.ContainerDevice{
+			IsolatedDeviceId: isoDev.GetId(),
+			Type:             isoDev.DevType,
+			Addr:             isoDev.Addr,
+			Path:             isoDev.DevicePath,
+		}
+		hSpec.Devices = append(hSpec.Devices, ctrDev)
+	}
+	return hSpec, nil
 }

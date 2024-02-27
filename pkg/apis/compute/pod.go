@@ -57,11 +57,6 @@ const (
 	CONTAINER_METADATA_CRI_ID = "cri_id"
 )
 
-type ContainerKeyValue struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
 type PodContainerCreateInput struct {
 	// Container name
 	Name string `json:"name"`
@@ -128,19 +123,15 @@ type ContainerMount struct {
 	Propagation ContainerMountPropagation `json:"propagation,omitempty"`
 }
 
+type ContainerDevice struct {
+	IsolatedDeviceId string `json:"isolated_device_id"`
+}
+
 type ContainerSpec struct {
-	// Image to use.
-	Image string `json:"image"`
-	// Command to execute (i.e., entrypoint for docker)
-	Command []string `json:"command"`
-	// Args for the Command (i.e. command for docker)
-	Args []string `json:"args"`
-	// Current working directory of the command.
-	WorkingDir string `json:"working_dir"`
-	// List of environment variable to set in the container.
-	Envs []*ContainerKeyValue `json:"envs"`
+	apis.ContainerSpec
 	// Mounts for the container.
 	// Mounts []*ContainerMount `json:"mounts"`
+	Devices []*ContainerDevice `json:"devices"`
 }
 
 func (c *ContainerSpec) String() string {

@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package compute
+package host
 
-import (
-	"yunion.io/x/onecloud/pkg/mcclient/modulebase"
-	"yunion.io/x/onecloud/pkg/mcclient/modules"
-)
+import "yunion.io/x/onecloud/pkg/apis"
 
-var (
-	IsolatedDevices modulebase.ResourceManager
-)
+type ContainerSpec struct {
+	apis.ContainerSpec
+	Devices []*ContainerDevice `json:"devices"`
+}
 
-func init() {
-	IsolatedDevices = modules.NewComputeManager("isolated_device", "isolated_devices",
-		[]string{"ID", "Dev_type",
-			"Model", "Addr", "Vendor_device_id", "Mdev_id",
-			"Host_id", "Host",
-			"Guest_id", "Guest", "Guest_status", "Device_path", "PCIE_Info"},
-		[]string{})
-	modules.RegisterCompute(&IsolatedDevices)
+type ContainerDevice struct {
+	IsolatedDeviceId string `json:"isolated_device_id"`
+	Type             string `json:"type"`
+	Path             string `json:"path"`
+	Addr             string `json:"addr"`
+	ContainerPath    string `json:"container_path"`
+}
+
+type ContainerCreateInput struct {
+	Name    string         `json:"name"`
+	GuestId string         `json:"guest_id"`
+	Spec    *ContainerSpec `json:"spec"`
 }
