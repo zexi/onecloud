@@ -31,7 +31,8 @@ var (
 type ContainerDeviceType string
 
 const (
-	ContainerDeviceTypeCphAMDGPU ContainerDeviceType = api.CONTAINER_CPH_AMD_GPU
+	ContainerDeviceTypeCphAMDGPU     ContainerDeviceType = api.CONTAINER_CPH_AMD_GPU
+	ContainerDeviceTypeCphASOPBinder ContainerDeviceType = api.CONTAINER_CPH_AOSP_BINDER
 )
 
 func GetContainerDeviceManager(t ContainerDeviceType) (IContainerDeviceManager, error) {
@@ -61,6 +62,6 @@ type ContainerDeviceConfiguration struct {
 
 type IContainerDeviceManager interface {
 	GetType() ContainerDeviceType
-	NewDevice(dev *ContainerDevice) (IDevice, error)
-	NewContainerDevice(dev *hostapi.ContainerDevice) (*runtimeapi.Device, error)
+	NewDevices(dev *ContainerDevice) ([]IDevice, error)
+	NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error)
 }

@@ -15,12 +15,12 @@
 package container_device
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
-	"yunion.io/x/log"
 	"yunion.io/x/pkg/errors"
 
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
@@ -28,12 +28,12 @@ import (
 )
 
 func init() {
-	isolated_device.RegisterContainerDeviceManager(newContainerCphAMDGPUManager())
+	isolated_device.RegisterContainerDeviceManager(newCphAMDGPUManager())
 }
 
 type cphAMDGPUManager struct{}
 
-func newContainerCphAMDGPUManager() *cphAMDGPUManager {
+func newCphAMDGPUManager() *cphAMDGPUManager {
 	return &cphAMDGPUManager{}
 }
 
@@ -41,18 +41,30 @@ func (m *cphAMDGPUManager) GetType() isolated_device.ContainerDeviceType {
 	return isolated_device.ContainerDeviceTypeCphAMDGPU
 }
 
-func (m *cphAMDGPUManager) NewDevice(dev *isolated_device.ContainerDevice) (isolated_device.IDevice, error) {
+func (m *cphAMDGPUManager) NewDevices(dev *isolated_device.ContainerDevice) ([]isolated_device.IDevice, error) {
 	if !strings.HasPrefix(dev.Path, "/dev/dri/renderD") {
-		return nil, errors.Errorf("device path %q doesn't start with /dev/dri/renderD")
+		return nil, errors.Errorf("device path %q doesn't start with /dev/dri/renderD", dev.Path)
 	}
-	return newCphAMDGPU(dev.Path)
+	num := dev.VirtualNumber
+	if num <= 0 {
+		return nil, errors.Errorf("virtual_number must > 0")
+	}
+	gpuDevs := make([]isolated_device.IDevice, 0)
+	for i := 0; i < num; i++ {
+		gpuDev, err := newCphAMDGPU(dev.Path, i)
+		if err != nil {
+			return nil, errors.Wrapf(err, "new CPH AMD GPU with index %d", i)
+		}
+		gpuDevs = append(gpuDevs, gpuDev)
+	}
+	return gpuDevs, nil
 }
 
 func (m *cphAMDGPUManager) getDeviceHostPathByAddr(dev *hostapi.ContainerDevice) (string, error) {
 	return dev.Path, nil
 }
 
-func (m *cphAMDGPUManager) NewContainerDevice(dev *hostapi.ContainerDevice) (*runtimeapi.Device, error) {
+func (m *cphAMDGPUManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
 	hostPath, err := m.getDeviceHostPathByAddr(dev)
 	if err != nil {
 		return nil, errors.Wrap(err, "get device host path")
@@ -62,35 +74,19 @@ func (m *cphAMDGPUManager) NewContainerDevice(dev *hostapi.ContainerDevice) (*ru
 		HostPath:      hostPath,
 		Permissions:   "rwm",
 	}
-	return cDev, nil
+	return []*runtimeapi.Device{cDev}, nil
 }
 
 type cphAMDGPU struct {
-	*isolated_device.SBaseDevice
+	*BaseDevice
 	Path string
-}
-
-func (c cphAMDGPU) GetVGACmd() string {
-	return ""
-}
-
-func (c cphAMDGPU) GetCPUCmd() string {
-	return ""
-}
-
-func (c cphAMDGPU) GetQemuId() string {
-	return ""
-}
-
-func (c cphAMDGPU) CustomProbe(idx int) error {
-	return nil
 }
 
 func (c cphAMDGPU) GetDevicePath() string {
 	return c.Path
 }
 
-func newCphAMDGPU(devPath string) (*cphAMDGPU, error) {
+func newCphAMDGPU(devPath string, index int) (*cphAMDGPU, error) {
 	dir := "/dev/dri/by-path/"
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -104,7 +100,6 @@ func newCphAMDGPU(devPath string) (*cphAMDGPU, error) {
 			return nil, errors.Wrapf(err, "read link of %s", entry.Name())
 		}
 		linkDevPath := path.Join(dir, linkPath)
-		log.Infof("linkDevPath: %s", linkDevPath)
 		if linkDevPath == devPath {
 			// get pci address
 			if !strings.HasSuffix(entryName, "-render") {
@@ -119,9 +114,10 @@ func newCphAMDGPU(devPath string) (*cphAMDGPU, error) {
 				return nil, errors.Wrapf(err, "GetPCIStrByAddr %s", pciAddr)
 			}
 			dev := isolated_device.NewPCIDevice2(pciOutput[0])
+			dev.Addr = fmt.Sprintf("%s-%d", dev.Addr, index)
 			return &cphAMDGPU{
-				SBaseDevice: isolated_device.NewBaseDevice(dev, string(isolated_device.ContainerDeviceTypeCphAMDGPU)),
-				Path:        devPath,
+				BaseDevice: NewBaseDevice(dev, isolated_device.ContainerDeviceTypeCphAMDGPU),
+				Path:       devPath,
 			}, nil
 		}
 	}

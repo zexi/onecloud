@@ -178,11 +178,11 @@ func (man *isolatedDeviceManager) probeContainerDevices() {
 		if err != nil {
 			panicFatal(errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type))
 		}
-		iDev, err := devMan.NewDevice(dev)
+		iDevs, err := devMan.NewDevices(dev)
 		if err != nil {
-			panicFatal(errors.Wrapf(err, "NewDevice %#v", dev))
+			panicFatal(errors.Wrapf(err, "NewDevices %#v", dev))
 		}
-		man.devices = append(man.devices, iDev)
+		man.devices = append(man.devices, iDevs...)
 	}
 }
 

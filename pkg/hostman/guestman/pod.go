@@ -423,13 +423,7 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		Linux:   &runtimeapi.LinuxContainerConfig{},
 		LogPath: s.getContainerLogPath(ctrId),
 		Envs:    []*runtimeapi.KeyValue{},
-		Devices: []*runtimeapi.Device{
-			//{
-			//	ContainerPath: "/dev/dri/renderD128",
-			//	HostPath:      "/dev/dri/renderD128",
-			//	Permissions:   "rwm",
-			//},
-		},
+		Devices: []*runtimeapi.Device{},
 	}
 	if len(spec.Devices) != 0 {
 		for _, dev := range spec.Devices {
@@ -437,11 +431,11 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 			if err != nil {
 				return "", errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
 			}
-			ctrDev, err := man.NewContainerDevice(dev)
+			ctrDevs, err := man.NewContainerDevices(dev)
 			if err != nil {
-				return "", errors.Wrapf(err, "NewContainerDevice with %#v", dev)
+				return "", errors.Wrapf(err, "NewContainerDevices with %#v", dev)
 			}
-			ctrCfg.Devices = append(ctrCfg.Devices, ctrDev)
+			ctrCfg.Devices = append(ctrCfg.Devices, ctrDevs...)
 		}
 	}
 	if len(spec.Command) != 0 {
