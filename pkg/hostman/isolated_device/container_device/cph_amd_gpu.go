@@ -45,12 +45,11 @@ func (m *cphAMDGPUManager) NewDevices(dev *isolated_device.ContainerDevice) ([]i
 	if !strings.HasPrefix(dev.Path, "/dev/dri/renderD") {
 		return nil, errors.Errorf("device path %q doesn't start with /dev/dri/renderD", dev.Path)
 	}
-	num := dev.VirtualNumber
-	if num <= 0 {
-		return nil, errors.Errorf("virtual_number must > 0")
+	if err := CheckVirtualNumber(dev); err != nil {
+		return nil, err
 	}
 	gpuDevs := make([]isolated_device.IDevice, 0)
-	for i := 0; i < num; i++ {
+	for i := 0; i < dev.VirtualNumber; i++ {
 		gpuDev, err := newCphAMDGPU(dev.Path, i)
 		if err != nil {
 			return nil, errors.Wrapf(err, "new CPH AMD GPU with index %d", i)
@@ -79,11 +78,6 @@ func (m *cphAMDGPUManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]
 
 type cphAMDGPU struct {
 	*BaseDevice
-	Path string
-}
-
-func (c cphAMDGPU) GetDevicePath() string {
-	return c.Path
 }
 
 func newCphAMDGPU(devPath string, index int) (*cphAMDGPU, error) {
@@ -116,8 +110,7 @@ func newCphAMDGPU(devPath string, index int) (*cphAMDGPU, error) {
 			dev := isolated_device.NewPCIDevice2(pciOutput[0])
 			dev.Addr = fmt.Sprintf("%s-%d", dev.Addr, index)
 			return &cphAMDGPU{
-				BaseDevice: NewBaseDevice(dev, isolated_device.ContainerDeviceTypeCphAMDGPU),
-				Path:       devPath,
+				BaseDevice: NewBaseDevice(dev, isolated_device.ContainerDeviceTypeCphAMDGPU, devPath),
 			}, nil
 		}
 	}

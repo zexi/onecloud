@@ -54,9 +54,8 @@ func (m *cphAOSPBinderManager) GetType() isolated_device.ContainerDeviceType {
 }
 
 func (m *cphAOSPBinderManager) NewDevices(dev *isolated_device.ContainerDevice) ([]isolated_device.IDevice, error) {
-	num := dev.VirtualNumber
-	if num <= 0 {
-		return nil, errors.Errorf("virtual_number must > 0")
+	if err := CheckVirtualNumber(dev); err != nil {
+		return nil, err
 	}
 	if err := m.initialize(dev); err != nil {
 		return nil, errors.Wrap(err, "initialize")
@@ -131,33 +130,20 @@ func (m *cphAOSPBinderManager) createBinderDevice(dev *hostapi.ContainerDevice) 
 type cphAOSPBinder struct {
 	*BaseDevice
 	ControlPath string
-	Path        string
 }
 
 func newCphAOSPBinder(idx int, ctrPath string) (*cphAOSPBinder, error) {
 	id := fmt.Sprintf("aosp_binder_%d", idx)
 	dev := &isolated_device.PCIDevice{
-		Addr:          fmt.Sprintf("%d", idx),
-		ClassName:     "",
-		ClassCode:     "",
-		VendorName:    "",
-		VendorId:      CPH_AOSP_VENDOR_ID,
-		DeviceName:    "",
-		DeviceId:      CPH_AOSP_DEVICE_ID,
-		SubvendorName: "",
-		SubvendorId:   "",
-		SubdeviceName: "",
-		SubdeviceId:   "",
-		ModelName:     CPH_AOSP_BINDER_MODEL_NAME,
+		Addr:      fmt.Sprintf("%d", idx),
+		VendorId:  CPH_AOSP_VENDOR_ID,
+		DeviceId:  CPH_AOSP_DEVICE_ID,
+		ModelName: CPH_AOSP_BINDER_MODEL_NAME,
 	}
+	devPath := fmt.Sprintf("/dev/%s", id)
 	binderDev := &cphAOSPBinder{
-		BaseDevice:  NewBaseDevice(dev, isolated_device.ContainerDeviceTypeCphASOPBinder),
+		BaseDevice:  NewBaseDevice(dev, isolated_device.ContainerDeviceTypeCphASOPBinder, devPath),
 		ControlPath: ctrPath,
-		Path:        fmt.Sprintf("/dev/%s", id),
 	}
 	return binderDev, nil
-}
-
-func (c cphAOSPBinder) GetDevicePath() string {
-	return c.Path
 }

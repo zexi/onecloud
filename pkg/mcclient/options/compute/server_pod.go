@@ -36,6 +36,9 @@ type PodCreateOptions struct {
 	AllowDelete *bool    `help:"Unlock server to allow deleting" json:"-"`
 	PortMapping []string `help:"Port mapping of the pod and the format is: <host_port>:<container_port>/<tcp|udp>" short-token:"p"`
 	Arch        string   `help:"image arch" choices:"aarch64|x86_64"`
+	Command     []string `help:"Command to execute (i.e., entrypoint for docker)" json:"command"`
+	Args        []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
+	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
 
 	ServerCreateCommonConfig
 }
@@ -108,9 +111,9 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 					ContainerSpec: computeapi.ContainerSpec{
 						ContainerSpec: apis.ContainerSpec{
 							Image:      o.IMAGE,
-							Command:    nil,
-							Args:       nil,
-							WorkingDir: "",
+							Command:    o.Command,
+							Args:       o.Args,
+							WorkingDir: o.WorkingDir,
 							Envs:       nil,
 						},
 					},

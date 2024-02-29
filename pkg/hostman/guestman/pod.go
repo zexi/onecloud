@@ -242,7 +242,12 @@ func (s *sPodGuestInstance) LoadDesc() error {
 }
 
 func (s *sPodGuestInstance) loadContainers() error {
+	s.containers = make(map[string]*sContainer)
 	ctrFile := s.getContainersFilePath()
+	if !fileutils2.Exists(ctrFile) {
+		log.Warningf("pod %s containers file %s doesn't exist", s.Id, ctrFile)
+		return nil
+	}
 	ctrStr, err := ioutil.ReadFile(ctrFile)
 	if err != nil {
 		return errors.Wrapf(err, "read %s", ctrFile)
@@ -255,7 +260,6 @@ func (s *sPodGuestInstance) loadContainers() error {
 	if err := obj.Unmarshal(ctrs); err != nil {
 		return errors.Wrapf(err, "unmarshal %s to container map", obj.String())
 	}
-	log.Infof("========load containers: %#v", ctrs)
 	s.containers = ctrs
 	return nil
 }
@@ -267,7 +271,7 @@ func (s *sPodGuestInstance) PostLoad(m *SGuestManager) error {
 func (s *sPodGuestInstance) getContainerCRIId(ctrId string) (string, error) {
 	ctr := s.getContainer(ctrId)
 	if ctr == nil {
-		return "", errors.Errorf("Not found container %s", ctrId)
+		return "", errors.Wrapf(errors.ErrNotFound, "Not found container %s", ctrId)
 	}
 	return ctr.CRIId, nil
 }
@@ -448,7 +452,7 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	if err != nil {
 		return "", errors.Wrap(err, "getPodSandboxConfig")
 	}
-	criId, err := s.getCRI().CreateContainer(ctx, s.getCRIId(), podCfg, ctrCfg, true)
+	criId, err := s.getCRI().CreateContainer(ctx, s.getCRIId(), podCfg, ctrCfg, false)
 	if err != nil {
 		return "", errors.Wrap(err, "cri.CreateContainer")
 	}
@@ -460,11 +464,13 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 
 func (s *sPodGuestInstance) DeleteContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error) {
 	criId, err := s.getContainerCRIId(ctrId)
-	if err != nil {
+	if err != nil && errors.Cause(err) != errors.ErrNotFound {
 		return nil, errors.Wrap(err, "getContainerCRIId")
 	}
-	if err := s.getCRI().RemoveContainer(ctx, criId); err != nil {
-		return nil, errors.Wrap(err, "cri.RemoveContainer")
+	if criId != "" {
+		if err := s.getCRI().RemoveContainer(ctx, criId); err != nil {
+			return nil, errors.Wrap(err, "cri.RemoveContainer")
+		}
 	}
 	// refresh local containers file
 	delete(s.containers, ctrId)

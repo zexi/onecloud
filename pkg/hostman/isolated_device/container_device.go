@@ -33,6 +33,8 @@ type ContainerDeviceType string
 const (
 	ContainerDeviceTypeCphAMDGPU     ContainerDeviceType = api.CONTAINER_CPH_AMD_GPU
 	ContainerDeviceTypeCphASOPBinder ContainerDeviceType = api.CONTAINER_CPH_AOSP_BINDER
+	ContainerNetintCAASIC            ContainerDeviceType = api.CONTAINER_NETINT_CA_ASIC
+	ContainerNetintCAQuadra          ContainerDeviceType = api.CONTAINER_NETINT_CA_QUADRA
 )
 
 func GetContainerDeviceManager(t ContainerDeviceType) (IContainerDeviceManager, error) {
