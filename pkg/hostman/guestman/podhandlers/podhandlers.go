@@ -69,12 +69,21 @@ func AddPodHandlers(prefix string, app *appsrv.Application) {
 		"stop":        stopContainer,
 		"delete":      deleteContainer,
 		"sync-status": syncContainerStatus,
+		"pull-image":  pullImage,
 	}
 	for action, f := range ctrHandlers {
 		app.AddHandler("POST",
 			fmt.Sprintf("%s/pods/%s/containers/%s/%s", prefix, POD_ID, CONTAINER_ID, action),
 			containerActionHandler(f))
 	}
+}
+
+func pullImage(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {
+	input := new(hostapi.ContainerPullImageInput)
+	if err := body.Unmarshal(input); err != nil {
+		return nil, errors.Wrap(err, "unmarshal to ContainerPullImageInput")
+	}
+	return pod.PullImage(ctx, userCred, ctrId, input)
 }
 
 func createContainer(ctx context.Context, userCred mcclient.TokenCredential, pod guestman.PodInstance, id string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {

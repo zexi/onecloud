@@ -34,3 +34,21 @@ type ContainerCreateInput struct {
 	GuestId string         `json:"guest_id"`
 	Spec    *ContainerSpec `json:"spec"`
 }
+
+type ContainerPullImageAuthConfig struct {
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	Auth          string `json:"auth,omitempty"`
+	ServerAddress string `json:"server_address,omitempty"`
+	// IdentityToken is used to authenticate the user and get
+	// an access token for the registry.
+	IdentityToken string `json:"identity_token,omitempty"`
+	// RegistryToken is a bearer token to be sent to a registry
+	RegistryToken string `json:"registry_token,omitempty"`
+}
+
+type ContainerPullImageInput struct {
+	Image      string                        `json:"image"`
+	PullPolicy apis.ImagePullPolicy          `json:"pull_policy"`
+	Auth       *ContainerPullImageAuthConfig `json:"auth"`
+}

@@ -42,6 +42,7 @@ func (t *PodDeleteTask) OnInit(ctx context.Context, obj db.IStandaloneModel, bod
 }
 
 func (t *PodDeleteTask) OnWaitContainerDeleted(ctx context.Context, pod *models.SGuest, _ jsonutils.JSONObject) {
+	pod.SetStatus(t.GetUserCred(), api.POD_STATUS_DELETING_CONTAINER, "")
 	ctrs, err := models.GetContainerManager().GetContainersByPod(pod.GetId())
 	if err != nil {
 		t.OnWaitContainerDeletedFailed(ctx, pod, jsonutils.NewString(errors.Wrap(err, "GetContainersByPod").Error()))

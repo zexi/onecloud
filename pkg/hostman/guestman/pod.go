@@ -13,6 +13,7 @@ import (
 	"yunion.io/x/log"
 	"yunion.io/x/pkg/errors"
 
+	"yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
@@ -35,6 +36,7 @@ type PodInstance interface {
 	DeleteContainer(ctx context.Context, cred mcclient.TokenCredential, id string) (jsonutils.JSONObject, error)
 	SyncContainerStatus(ctx context.Context, cred mcclient.TokenCredential, ctrId string) (jsonutils.JSONObject, error)
 	StopContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
+	PullImage(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerPullImageInput) (jsonutils.JSONObject, error)
 }
 
 type sContainer struct {
@@ -509,4 +511,51 @@ func (s *sPodGuestInstance) SyncContainerStatus(ctx context.Context, userCred mc
 		return nil, errors.Wrap(err, "get container status")
 	}
 	return jsonutils.Marshal(computeapi.ContainerSyncStatusResponse{Status: status}), nil
+}
+
+func (s *sPodGuestInstance) PullImage(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerPullImageInput) (jsonutils.JSONObject, error) {
+	policy := input.PullPolicy
+	if policy == apis.ImagePullPolicyIfNotPresent || policy == "" {
+		// check if image is presented
+		img, err := s.getCRI().ImageStatus(ctx, &runtimeapi.ImageStatusRequest{
+			Image: &runtimeapi.ImageSpec{
+				Image: input.Image,
+			},
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "cri.ImageStatus %s", input.Image)
+		}
+		if img.Image != nil {
+			log.Infof("image %s already exists, skipping pulling it when policy is %s", input.Image, policy)
+			return jsonutils.Marshal(&runtimeapi.PullImageResponse{
+				ImageRef: img.Image.Id,
+			}), nil
+		}
+	}
+	podCfg, err := s.getPodSandboxConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "get pod sandbox config")
+	}
+	req := &runtimeapi.PullImageRequest{
+		Image: &runtimeapi.ImageSpec{
+			Image: input.Image,
+		},
+		SandboxConfig: podCfg,
+	}
+	if input.Auth != nil {
+		authCfg := &runtimeapi.AuthConfig{
+			Username:      input.Auth.Username,
+			Password:      input.Auth.Password,
+			Auth:          input.Auth.Auth,
+			ServerAddress: input.Auth.ServerAddress,
+			IdentityToken: input.Auth.IdentityToken,
+			RegistryToken: input.Auth.RegistryToken,
+		}
+		req.Auth = authCfg
+	}
+	resp, err := s.getCRI().PullImage(ctx, req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cri.PullImage %s", input.Image)
+	}
+	return jsonutils.Marshal(resp), nil
 }

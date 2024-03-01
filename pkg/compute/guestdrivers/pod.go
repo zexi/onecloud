@@ -326,6 +326,10 @@ func (p *SPodDriver) RequestSyncContainerStatus(ctx context.Context, userCred mc
 	return p.performContainerAction(ctx, userCred, task, "sync-status", nil)
 }
 
+func (p *SPodDriver) RequestPullContainerImage(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
+	return p.performContainerAction(ctx, userCred, task, "pull-image", task.GetParams())
+}
+
 func (p *SPodDriver) OnDeleteGuestFinalCleanup(ctx context.Context, guest *models.SGuest, userCred mcclient.TokenCredential) error {
 	// clean disk records in DB
 	return guest.DeleteAllDisksInDB(ctx, userCred)

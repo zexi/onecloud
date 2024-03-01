@@ -21,6 +21,7 @@ import (
 	"yunion.io/x/pkg/errors"
 
 	api "yunion.io/x/onecloud/pkg/apis/compute"
+	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
 	"yunion.io/x/onecloud/pkg/compute/models"
@@ -51,7 +52,27 @@ func init() {
 }
 
 func (t *ContainerCreateTask) OnInit(ctx context.Context, obj db.IStandaloneModel, body jsonutils.JSONObject) {
-	t.requestCreate(ctx, obj.(*models.SContainer))
+	t.startPullImage(ctx, obj.(*models.SContainer))
+}
+
+func (t *ContainerCreateTask) startPullImage(ctx context.Context, container *models.SContainer) {
+	t.SetStage("OnImagePulled", nil)
+	input := &hostapi.ContainerPullImageInput{
+		Image:      container.Spec.Image,
+		PullPolicy: container.Spec.ImagePullPolicy,
+	}
+	if err := container.StartPullImageTask(ctx, t.GetUserCred(), input, t.GetTaskId()); err != nil {
+		t.SetStageFailed(ctx, jsonutils.NewString(err.Error()))
+		return
+	}
+}
+
+func (t *ContainerCreateTask) OnImagePulled(ctx context.Context, container *models.SContainer, data jsonutils.JSONObject) {
+	t.requestCreate(ctx, container)
+}
+
+func (t *ContainerCreateTask) OnImagePulledFailed(ctx context.Context, container *models.SContainer, reason jsonutils.JSONObject) {
+	t.SetStageFailed(ctx, reason)
 }
 
 func (t *ContainerCreateTask) requestCreate(ctx context.Context, container *models.SContainer) {

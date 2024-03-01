@@ -23,6 +23,7 @@ import (
 	"yunion.io/x/pkg/util/sets"
 	"yunion.io/x/sqlchemy"
 
+	"yunion.io/x/onecloud/pkg/apis"
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
@@ -138,6 +139,12 @@ func (m *SContainerManager) ValidateSpec(userCred mcclient.TokenCredential, inpu
 		}
 		dev.IsolatedDeviceId = devObj.GetId()
 	}
+	if input.ImagePullPolicy == "" {
+		input.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
+	}
+	if !sets.NewString(apis.ImagePullPolicyAlways, apis.ImagePullPolicyIfNotPresent).Has(string(input.ImagePullPolicy)) {
+		return httperrors.NewInputParameterError("invalid image_pull_policy %s", input.ImagePullPolicy)
+	}
 	return nil
 }
 
@@ -150,12 +157,13 @@ func (m *SContainerManager) ValidateSpec(userCred mcclient.TokenCredential, inpu
 }
 
 func (c *SContainer) CustomizeCreate(ctx context.Context, userCred mcclient.TokenCredential, ownerId mcclient.IIdentityProvider, query jsonutils.JSONObject, data jsonutils.JSONObject) error {
-	// calculate index
-	idx, err := GetContainerManager().GetContainerIndex(c.GuestId)
-	if err != nil {
-		return errors.Wrap(err, "GetContainerIndex")
+	input := new(api.ContainerCreateInput)
+	if err := data.Unmarshal(input); err != nil {
+		return errors.Wrap(err, "unmarshal to ContainerCreateInput")
 	}
-	c.Index = idx
+	if input.Spec.ImagePullPolicy == "" {
+		c.Spec.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
+	}
 	return nil
 }*/
 
@@ -228,6 +236,15 @@ func (c *SContainer) CustomizeDelete(ctx context.Context, userCred mcclient.Toke
 func (c *SContainer) StartDeleteTask(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error {
 	c.SetStatus(userCred, api.CONTAINER_STATUS_DELETING, "")
 	task, err := taskman.TaskManager.NewTask(ctx, "ContainerDeleteTask", c, userCred, nil, parentTaskId, "", nil)
+	if err != nil {
+		return errors.Wrap(err, "NewTask")
+	}
+	return task.ScheduleRun(nil)
+}
+
+func (c *SContainer) StartPullImageTask(ctx context.Context, userCred mcclient.TokenCredential, input *hostapi.ContainerPullImageInput, parentTaskId string) error {
+	c.SetStatus(userCred, api.CONTAINER_STATUS_PULLING_IMAGE, "")
+	task, err := taskman.TaskManager.NewTask(ctx, "ContainerPullImageTask", c, userCred, jsonutils.Marshal(input).(*jsonutils.JSONDict), parentTaskId, "", nil)
 	if err != nil {
 		return errors.Wrap(err, "NewTask")
 	}

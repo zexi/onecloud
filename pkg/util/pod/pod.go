@@ -28,6 +28,8 @@ type CRI interface {
 	ListContainers(ctx context.Context, opts ListContainerOptions) ([]*runtimeapi.Container, error)
 	ContainerStatus(ctx context.Context, ctrId string) (*runtimeapi.ContainerStatusResponse, error)
 	ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error)
+	PullImage(ctx context.Context, req *runtimeapi.PullImageRequest) (*runtimeapi.PullImageResponse, error)
+	ImageStatus(ctx context.Context, req *runtimeapi.ImageStatusRequest) (*runtimeapi.ImageStatusResponse, error)
 
 	// lower layer client
 	// getImageClient() runtimeapi.ImageServiceClient
@@ -333,4 +335,16 @@ func (c crictl) ContainerStatus(ctx context.Context, ctrId string) (*runtimeapi.
 		Verbose:     false,
 	}
 	return c.getRuntimeClient().ContainerStatus(ctx, req)
+}
+
+func (c crictl) PullImage(ctx context.Context, req *runtimeapi.PullImageRequest) (*runtimeapi.PullImageResponse, error) {
+	resp, err := c.getImageClient().PullImage(ctx, req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "PullImage")
+	}
+	return resp, nil
+}
+
+func (c crictl) ImageStatus(ctx context.Context, req *runtimeapi.ImageStatusRequest) (*runtimeapi.ImageStatusResponse, error) {
+	return c.getImageClient().ImageStatus(ctx, req)
 }

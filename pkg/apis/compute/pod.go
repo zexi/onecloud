@@ -35,6 +35,9 @@ const (
 	POD_STATUS_DELETING_CONTAINER      = "deleting_container"
 	POD_STATUS_DELETE_CONTAINER_FAILED = "delete_container_failed"
 
+	CONTAINER_STATUS_PULLING_IMAGE      = "pulling_image"
+	CONTAINER_STATUS_PULL_IMAGE_FAILED  = "pull_image_failed"
+	CONTAINER_STATUS_PULLED_IMAGE       = "pulled_image"
 	CONTAINER_STATUS_CREATING           = "creating"
 	CONTAINER_STATUS_CREATE_FAILED      = "create_failed"
 	CONTAINER_STATUS_STARTING           = "starting"
