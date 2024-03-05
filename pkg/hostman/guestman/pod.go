@@ -193,8 +193,23 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 		PortMappings: nil,
 		Labels:       nil,
 		Annotations:  nil,
-		Linux:        nil,
-		Windows:      nil,
+		Linux: &runtimeapi.LinuxPodSandboxConfig{
+			CgroupParent: "",
+			SecurityContext: &runtimeapi.LinuxSandboxSecurityContext{
+				NamespaceOptions:   nil,
+				SelinuxOptions:     nil,
+				RunAsUser:          nil,
+				RunAsGroup:         nil,
+				ReadonlyRootfs:     false,
+				SupplementalGroups: nil,
+				//Privileged:         true,
+				Seccomp:            nil,
+				Apparmor:           nil,
+				SeccompProfilePath: "",
+			},
+			Sysctls: nil,
+		},
+		Windows: nil,
 	}
 
 	if len(podInput.PortMappings) != 0 {
@@ -418,6 +433,7 @@ func (s *sPodGuestInstance) getContainerLogPath(ctrId string) string {
 }
 
 func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerCreateInput) (string, error) {
+	log.Infof("=====container input: %s", jsonutils.Marshal(input).PrettyString())
 	spec := input.Spec
 	ctrCfg := &runtimeapi.ContainerConfig{
 		Metadata: &runtimeapi.ContainerMetadata{
@@ -426,7 +442,28 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 		Image: &runtimeapi.ImageSpec{
 			Image: spec.Image,
 		},
-		Linux:   &runtimeapi.LinuxContainerConfig{},
+		Linux: &runtimeapi.LinuxContainerConfig{
+			SecurityContext: &runtimeapi.LinuxContainerSecurityContext{
+				Capabilities: &runtimeapi.Capability{
+					AddCapabilities: []string{"SYS_ADMIN"},
+				},
+				//Privileged:         true,
+				NamespaceOptions:   nil,
+				SelinuxOptions:     nil,
+				RunAsUser:          nil,
+				RunAsGroup:         nil,
+				RunAsUsername:      "",
+				ReadonlyRootfs:     false,
+				SupplementalGroups: nil,
+				NoNewPrivs:         false,
+				MaskedPaths:        nil,
+				ReadonlyPaths:      nil,
+				Seccomp:            nil,
+				Apparmor:           nil,
+				ApparmorProfile:    "",
+				SeccompProfilePath: "",
+			},
+		},
 		LogPath: s.getContainerLogPath(ctrId),
 		Envs:    []*runtimeapi.KeyValue{},
 		Devices: []*runtimeapi.Device{},

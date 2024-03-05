@@ -257,6 +257,27 @@ type ServerCreateCommonConfig struct {
 	Project        string   `help:"'Owner project ID or Name" json:"tenant"`
 	User           string   `help:"Owner user ID or Name"`
 	Count          int      `help:"Create multiple simultaneously" default:"1"`
+	Disk           []string `help:"
+	Disk descriptions
+	size: 500M, 10G
+	fs: swap, ext2, ext3, ext4, xfs, ntfs, fat, hfsplus
+	format: qcow2, raw, docker, iso, vmdk, vmdkflatver1, vmdkflatver2, vmdkflat, vmdksparse, vmdksparsever1, vmdksparsever2, vmdksesparse, vhd
+	driver: virtio, ide, scsi, sata, pvscsi
+	cache_mod: writeback, none, writethrough
+	medium: rotate, ssd, hybrid
+	disk_type: sys, data
+	mountpoint: /, /opt
+	storage_type: local, rbd, nas, nfs
+	snapshot_id: use snapshot-list get snapshot id
+	disk_id: use disk-list get disk id
+	storage_id: use storage-list get storage id
+	image_id: use image-list get image id
+	for example:
+		--disk 'image_id=c2be02a4-7ff2-43e6-8a00-a489e04d2d6f,size=10G,driver=ide,storage_type=rbd'
+		--disk 'size=500M'
+		--disk 'snpahost_id=1ceb8c6d-6571-451d-8957-4bd3a871af85'
+	" nargs:"+"`
+	DiskSchedtag []string `help:"Disk schedtag description, e.g. '0:<tag>:<strategy>'"`
 }
 
 func (o ServerCreateCommonConfig) Data() (*computeapi.ServerConfigs, error) {
@@ -268,6 +289,8 @@ func (o ServerCreateCommonConfig) Data() (*computeapi.ServerConfigs, error) {
 		PreferHost:    o.Host,
 		ResourceType:  o.ResourceType,
 		Count:         o.Count,
+		Networks:      make([]*computeapi.NetworkConfig, 0),
+		Disks:         make([]*computeapi.DiskConfig, 0),
 	}
 	for i, n := range o.Net {
 		net, err := cmdline.ParseNetworkConfig(n, i)
@@ -301,50 +324,6 @@ func (o ServerCreateCommonConfig) Data() (*computeapi.ServerConfigs, error) {
 		}
 		data.Schedtags = append(data.Schedtags, schedtag)
 	}
-	return data, nil
-}
-
-type ServerConfigs struct {
-	ServerCreateCommonConfig
-	Hypervisor                   string `help:"Hypervisor type" choices:"kvm|pod|esxi|baremetal|container|aliyun|azure|qcloud|aws|huawei|openstack|ucloud|volcengine|zstack|google|ctyun|incloudsphere|bingocloud|cloudpods|ecloud|jdcloud|remotefile|h3c|hcs|hcso|hcsop|proxmox"`
-	Backup                       bool   `help:"Create server with backup server"`
-	BackupHost                   string `help:"Perfered host where virtual backup server should be created"`
-	AutoSwitchToBackupOnHostDown bool   `help:"Auto switch to backup server on host down"`
-	Daemon                       *bool  `help:"Set as a daemon server" json:"is_daemon"`
-
-	Disk []string `help:"
-	Disk descriptions
-	size: 500M, 10G
-	fs: swap, ext2, ext3, ext4, xfs, ntfs, fat, hfsplus
-	format: qcow2, raw, docker, iso, vmdk, vmdkflatver1, vmdkflatver2, vmdkflat, vmdksparse, vmdksparsever1, vmdksparsever2, vmdksesparse, vhd
-	driver: virtio, ide, scsi, sata, pvscsi
-	cache_mod: writeback, none, writethrough
-	medium: rotate, ssd, hybrid
-	disk_type: sys, data
-	mountpoint: /, /opt
-	storage_type: local, rbd, nas, nfs
-	snapshot_id: use snapshot-list get snapshot id
-	disk_id: use disk-list get disk id
-	storage_id: use storage-list get storage id
-	image_id: use image-list get image id
-	for example:
-		--disk 'image_id=c2be02a4-7ff2-43e6-8a00-a489e04d2d6f,size=10G,driver=ide,storage_type=rbd'
-		--disk 'size=500M'
-		--disk 'snpahost_id=1ceb8c6d-6571-451d-8957-4bd3a871af85'
-	" nargs:"+"`
-	DiskSchedtag []string `help:"Disk schedtag description, e.g. '0:<tag>:<strategy>'"`
-	RaidConfig   []string `help:"Baremetal raid config" json:"-"`
-}
-
-func (o ServerConfigs) Data() (*computeapi.ServerConfigs, error) {
-	data, err := o.ServerCreateCommonConfig.Data()
-	if err != nil {
-		return nil, err
-	}
-	data.Backup = o.Backup
-	data.PreferBackupHost = o.BackupHost
-	data.IsDaemon = o.Daemon
-	data.Hypervisor = o.Hypervisor
 	for i, d := range o.Disk {
 		disk, err := cmdline.ParseDiskConfig(d, i)
 		if err != nil {
@@ -363,6 +342,29 @@ func (o ServerConfigs) Data() (*computeapi.ServerConfigs, error) {
 		d := data.Disks[idx]
 		d.Schedtags = append(d.Schedtags, tag)
 	}
+	return data, nil
+}
+
+type ServerConfigs struct {
+	ServerCreateCommonConfig
+	Hypervisor                   string `help:"Hypervisor type" choices:"kvm|pod|esxi|baremetal|container|aliyun|azure|qcloud|aws|huawei|openstack|ucloud|volcengine|zstack|google|ctyun|incloudsphere|bingocloud|cloudpods|ecloud|jdcloud|remotefile|h3c|hcs|hcso|hcsop|proxmox"`
+	Backup                       bool   `help:"Create server with backup server"`
+	BackupHost                   string `help:"Perfered host where virtual backup server should be created"`
+	AutoSwitchToBackupOnHostDown bool   `help:"Auto switch to backup server on host down"`
+	Daemon                       *bool  `help:"Set as a daemon server" json:"is_daemon"`
+
+	RaidConfig []string `help:"Baremetal raid config" json:"-"`
+}
+
+func (o ServerConfigs) Data() (*computeapi.ServerConfigs, error) {
+	data, err := o.ServerCreateCommonConfig.Data()
+	if err != nil {
+		return nil, err
+	}
+	data.Backup = o.Backup
+	data.PreferBackupHost = o.BackupHost
+	data.IsDaemon = o.Daemon
+	data.Hypervisor = o.Hypervisor
 	if len(o.RaidConfig) > 0 {
 		// if data.Hypervisor != "baremetal" {
 		// 	return nil, fmt.Errorf("RaidConfig is applicable to baremetal ONLY")

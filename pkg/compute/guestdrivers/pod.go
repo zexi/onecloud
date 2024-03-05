@@ -66,9 +66,19 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 	if len(input.Pod.Containers) == 0 {
 		return nil, httperrors.NewNotEmptyError("containers data is empty")
 	}
+	// validate port mappings
+	if err := p.validatePortMappings(input.Pod); err != nil {
+		return nil, errors.Wrap(err, "validate port mappings")
+	}
+
+	// validate volumes
+	if err := p.validateVolumes(input); err != nil {
+		return nil, errors.Wrap(err, "validate volumes")
+	}
+
 	sameName := ""
 	for idx, ctr := range input.Pod.Containers {
-		if err := p.validateContainerData(userCred, idx, input.Name, ctr); err != nil {
+		if err := p.validateContainerData(ctx, userCred, idx, input.Name, ctr, input); err != nil {
 			return nil, errors.Wrapf(err, "data of %d container", idx)
 		}
 		if ctr.Name == sameName {
@@ -77,24 +87,73 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 		sameName = ctr.Name
 	}
 
-	// validate port mappings
-	for idx, pm := range input.Pod.PortMappings {
-		// TODO: 判断 host port 是否重复
-		if err := p.validatePortMapping(pm); err != nil {
-			return nil, errors.Wrapf(err, "validate portmapping %d", idx)
-		}
-	}
-
 	// always set auto_start to true
 	input.AutoStart = true
 	return input, nil
 }
 
-func (p *SPodDriver) validateContainerData(userCred mcclient.TokenCredential, idx int, defaultNamePrefix string, ctr *api.PodContainerCreateInput) error {
+func (p *SPodDriver) validateVolumes(input *api.ServerCreateInput) error {
+	vols := input.Pod.Volumes
+	nameSets := sets.NewString()
+	for idx, vol := range vols {
+		if nameSets.Has(vol.Name) {
+			return httperrors.NewDuplicateNameError(vol.Name, fmt.Sprintf("volume %d", idx))
+		} else {
+			nameSets.Insert(vol.Name)
+		}
+		if err := p.validateVolume(input.Disks, vol); err != nil {
+			return errors.Wrapf(err, "validate volume %d", idx)
+		}
+	}
+	return nil
+}
+
+func (p *SPodDriver) validateVolume(disks []*api.DiskConfig, vol *api.PodVolume) error {
+	if vol.Name == "" {
+		return httperrors.NewNotEmptyError("volume name is required")
+	}
+	isAttrSet := false
+	if vol.Disk != nil {
+		isAttrSet = true
+		if err := p.validateVolumeDisk(disks, vol.Disk); err != nil {
+			return errors.Wrap(err, "validate volume disk")
+		}
+	}
+	if !isAttrSet {
+		return httperrors.NewNotEmptyError("One of volume type must be set")
+	}
+	return nil
+}
+
+func (p *SPodDriver) validateVolumeDisk(disks []*api.DiskConfig, volDisk *api.PodVolumeDisk) error {
+	if volDisk.DiskIndex < 0 {
+		return httperrors.NewInputParameterError("disk_index %d is less than 0", volDisk.DiskIndex)
+	}
+	if volDisk.DiskIndex >= len(disks) {
+		return httperrors.NewInputParameterError("disk_index %d is large than disk size %d", volDisk.DiskIndex, len(disks))
+	}
+	disk := disks[volDisk.DiskIndex]
+	if disk.Format != "raw" {
+		return httperrors.NewInputParameterError("disk %d format must be raw", volDisk.DiskIndex)
+	}
+	return nil
+}
+
+func (p *SPodDriver) validatePortMappings(input *api.PodCreateInput) error {
+	for idx, pm := range input.PortMappings {
+		// TODO: 判断 host port 是否重复
+		if err := p.validatePortMapping(pm); err != nil {
+			return errors.Wrapf(err, "validate portmapping %d", idx)
+		}
+	}
+	return nil
+}
+
+func (p *SPodDriver) validateContainerData(ctx context.Context, userCred mcclient.TokenCredential, idx int, defaultNamePrefix string, ctr *api.PodContainerCreateInput, input *api.ServerCreateInput) error {
 	if ctr.Name == "" {
 		ctr.Name = fmt.Sprintf("%s-%d", defaultNamePrefix, idx)
 	}
-	if err := models.GetContainerManager().ValidateSpec(userCred, &ctr.ContainerSpec); err != nil {
+	if err := models.GetContainerManager().ValidateSpec(ctx, userCred, &ctr.ContainerSpec, nil, input.Pod.Volumes); err != nil {
 		return errors.Wrap(err, "validate container spec")
 	}
 	return nil
@@ -157,11 +216,6 @@ func (p *SPodDriver) StartGuestCreateTask(guest *models.SGuest, ctx context.Cont
 	return task.ScheduleRun(nil)
 }
 
-func (p *SPodDriver) RequestGuestCreateAllDisks(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
-	// do nothing, call next stage
-	return task.ScheduleRun(nil)
-}
-
 func (p *SPodDriver) RequestGuestHotAddIso(ctx context.Context, guest *models.SGuest, path string, boot bool, task taskman.ITask) error {
 	// do nothing, call next stage
 	return task.ScheduleRun(nil)
@@ -207,14 +261,6 @@ func (p *SPodDriver) RequestSoftReset(ctx context.Context, guest *models.SGuest,
 	return p.newUnsupportOperationError("soft reset")
 }
 
-func (p *SPodDriver) RequestDetachDisk(ctx context.Context, guest *models.SGuest, disk *models.SDisk, task taskman.ITask) error {
-	return p.newUnsupportOperationError("detach disk")
-}
-
-func (p *SPodDriver) CanKeepDetachDisk() bool {
-	return false
-}
-
 func (p *SPodDriver) GetGuestVncInfo(ctx context.Context, userCred mcclient.TokenCredential, guest *models.SGuest, host *models.SHost, input *cloudprovider.ServerVncInput) (*cloudprovider.ServerVncOutput, error) {
 	return nil, p.newUnsupportOperationError("VNC")
 }
@@ -226,12 +272,6 @@ func (p *SPodDriver) OnGuestDeployTaskDataReceived(ctx context.Context, guest *m
 }
 
 func (p *SPodDriver) RequestStopGuestForDelete(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask) error {
-	// do nothing, call next stage
-	task.ScheduleRun(nil)
-	return nil
-}
-
-func (p *SPodDriver) RequestDetachDisksFromGuestForDelete(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
 	// do nothing, call next stage
 	task.ScheduleRun(nil)
 	return nil
@@ -283,8 +323,8 @@ func (p *SPodDriver) performContainerAction(ctx context.Context, userCred mcclie
 	return err
 }
 
-func (p *SPodDriver) getContainerCreateInput(ctr *models.SContainer) (*hostapi.ContainerCreateInput, error) {
-	spec, err := ctr.ToHostContainerSpec()
+func (p *SPodDriver) getContainerCreateInput(ctx context.Context, userCred mcclient.TokenCredential, ctr *models.SContainer) (*hostapi.ContainerCreateInput, error) {
+	spec, err := ctr.ToHostContainerSpec(ctx, userCred)
 	if err != nil {
 		return nil, errors.Wrap(err, "ToHostContainerSpec")
 	}
@@ -298,7 +338,7 @@ func (p *SPodDriver) getContainerCreateInput(ctr *models.SContainer) (*hostapi.C
 
 func (p *SPodDriver) RequestCreateContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
 	ctr := task.GetContainer()
-	input, err := p.getContainerCreateInput(ctr)
+	input, err := p.getContainerCreateInput(ctx, userCred, ctr)
 	if err != nil {
 		return errors.Wrap(err, "getContainerCreateInput")
 	}
@@ -307,7 +347,7 @@ func (p *SPodDriver) RequestCreateContainer(ctx context.Context, userCred mcclie
 
 func (p *SPodDriver) RequestStartContainer(ctx context.Context, userCred mcclient.TokenCredential, task models.IContainerTask) error {
 	ctr := task.GetContainer()
-	input, err := p.getContainerCreateInput(ctr)
+	input, err := p.getContainerCreateInput(ctx, userCred, ctr)
 	if err != nil {
 		return errors.Wrap(err, "getContainerCreateInput")
 	}
@@ -339,10 +379,6 @@ func (p *SPodDriver) RequestSyncConfigOnHost(ctx context.Context, guest *models.
 	// do nothing, call next stage
 	task.ScheduleRun(nil)
 	return nil
-}
-
-func (p *SPodDriver) DoGuestCreateDisksTask(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
-	return p.newUnsupportOperationError("create disk")
 }
 
 func (p *SPodDriver) RequestChangeVmConfig(ctx context.Context, guest *models.SGuest, task taskman.ITask, instanceType string, vcpuCount, cpuSockets, vmemSize int64) error {

@@ -81,9 +81,19 @@ type PodPortMapping struct {
 	HostIp        string                 `json:"host_ip"`
 }
 
+type PodVolume struct {
+	Name string         `json:"name"`
+	Disk *PodVolumeDisk `json:"disk"`
+}
+
+type PodVolumeDisk struct {
+	DiskIndex int `json:"disk_index"`
+}
+
 type PodCreateInput struct {
 	Containers   []*PodContainerCreateInput `json:"containers"`
 	PortMappings []*PodPortMapping          `json:"port_mappings"`
+	Volumes      []*PodVolume               `json:"volumes"`
 }
 
 type PodStartResponse struct {
@@ -99,42 +109,28 @@ type ContainerDesc struct {
 	Id string `json:"id"`
 }
 
-type ContainerMountPropagation string
-
-const (
-	// No mount propagation ("private" in Linux terminology).
-	MountPropagation_PROPAGATION_PRIVATE ContainerMountPropagation = "private"
-	// Mounts get propagated from the host to the container ("rslave" in Linux).
-	MountPropagation_PROPAGATION_HOST_TO_CONTAINER ContainerMountPropagation = "rslave"
-	// Mounts get propagated from the host to the container and from the
-	// container to the host ("rshared" in Linux).
-	MountPropagation_PROPAGATION_BIDIRECTIONAL ContainerMountPropagation = "rshared"
-)
-
-type ContainerMount struct {
-	// Path of the mount within the container.
-	ContainerPath string `json:"container_path,omitempty"`
-	// Path of the mount on the host. If the hostPath doesn't exist, then runtimes
-	// should report error. If the hostpath is a symbolic link, runtimes should
-	// follow the symlink and mount the real destination to container.
-	HostPath string `json:"host_path,omitempty"`
-	// If set, the mount is read-only.
-	Readonly bool `json:"readonly,omitempty"`
-	// If set, the mount needs SELinux relabeling.
-	SelinuxRelabel bool `json:"selinux_relabel,omitempty"`
-	// Requested propagation mode.
-	Propagation ContainerMountPropagation `json:"propagation,omitempty"`
-}
-
 type ContainerDevice struct {
 	IsolatedDeviceId string `json:"isolated_device_id"`
+}
+
+type ContainerVolumeMount struct {
+	// This must match the Name of a Volume.
+	Name          string `json:"name"`
+	AsRawDevice   bool   `json:"as_raw_device"`
+	RawDevicePath string `json:"raw_device_path"`
+	// Mounted read-only if true, read-write otherwise (false or unspecified).
+	ReadOnly bool `json:"read_only"`
+	// Path within the container at which the volume should be mounted.  Must
+	// not contain ':'.
+	MountPath string `json:"mount_path"`
 }
 
 type ContainerSpec struct {
 	apis.ContainerSpec
 	// Mounts for the container.
 	// Mounts []*ContainerMount `json:"mounts"`
-	Devices []*ContainerDevice `json:"devices"`
+	Devices      []*ContainerDevice      `json:"devices"`
+	VolumeMounts []*ContainerVolumeMount `json:"volume_mounts"`
 }
 
 func (c *ContainerSpec) String() string {

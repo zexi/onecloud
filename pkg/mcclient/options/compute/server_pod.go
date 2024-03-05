@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/coredns/coredns/plugin/pkg/log"
 	"yunion.io/x/pkg/errors"
 	"yunion.io/x/pkg/util/fileutils"
 	"yunion.io/x/pkg/util/regutils"
@@ -30,7 +31,7 @@ import (
 
 type PodCreateOptions struct {
 	NAME        string   `help:"Name of server pod" json:"-"`
-	IMAGE       string   `help:"Image of container" json:"image"`
+	IMAGE       string   `help:"Image of container" json:"-"`
 	MEM         string   `help:"Memory size MB" metavar:"MEM" json:"-"`
 	VcpuCount   int      `help:"#CPU cores of VM server, default 1" default:"1" metavar:"<SERVER_CPU_COUNT>" json:"vcpu_count" token:"ncpu"`
 	AllowDelete *bool    `help:"Unlock server to allow deleting" json:"-"`
@@ -39,6 +40,7 @@ type PodCreateOptions struct {
 	Command     []string `help:"Command to execute (i.e., entrypoint for docker)" json:"command"`
 	Args        []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
 	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
+	Volume      []string `help:"Volume specification: <name>:<type>:<info>, e.g.: raw_disk:disk:0"`
 
 	ServerCreateCommonConfig
 }
@@ -83,10 +85,33 @@ func parsePodPortMapping(input string) (*computeapi.PodPortMapping, error) {
 	}, nil
 }
 
+func parsePodVolume(volStr string) (*computeapi.PodVolume, error) {
+	segs := strings.Split(volStr, ":")
+	if len(segs) != 3 {
+		return nil, errors.Errorf("wrong volume string: %s", volStr)
+	}
+	name := segs[0]
+	volType := segs[1]
+	info := segs[2]
+	switch volType {
+	case "disk":
+		index, err := strconv.Atoi(info)
+		if err != nil {
+			return nil, errors.Wrapf(err, "wrong disk_index %s", info)
+		}
+		return &computeapi.PodVolume{
+			Name: name,
+			Disk: &computeapi.PodVolumeDisk{DiskIndex: index},
+		}, nil
+	default:
+		return nil, errors.Errorf("unsupported type %s", volType)
+	}
+}
+
 func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	config, err := o.ServerCreateCommonConfig.Data()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get ServerCreateCommonConfig.Data")
 	}
 	config.Hypervisor = computeapi.HYPERVISOR_POD
 
@@ -101,11 +126,32 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		}
 	}
 
+	vols := make([]*computeapi.PodVolume, len(o.Volume))
+	for idx, volStr := range o.Volume {
+		vol, err := parsePodVolume(volStr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse volume %s", volStr)
+		}
+		vols[idx] = vol
+	}
+
+	// convert volume to volumeMounts
+	// TODO: support other volume type except disk
+	volMounts := make([]*computeapi.ContainerVolumeMount, len(vols))
+	for idx, vol := range vols {
+		volMounts[idx] = &computeapi.ContainerVolumeMount{
+			Name:          vol.Name,
+			AsRawDevice:   true,
+			RawDevicePath: fmt.Sprintf("/dev/loop%d", idx),
+		}
+	}
+
 	params := &computeapi.ServerCreateInput{
 		ServerConfigs: config,
 		VcpuCount:     o.VcpuCount,
 		Pod: &computeapi.PodCreateInput{
 			PortMappings: portMappings,
+			Volumes:      vols,
 			Containers: []*computeapi.PodContainerCreateInput{
 				{
 					ContainerSpec: computeapi.ContainerSpec{
@@ -116,6 +162,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 							WorkingDir: o.WorkingDir,
 							Envs:       nil,
 						},
+						VolumeMounts: volMounts,
 					},
 				},
 			},
@@ -139,5 +186,6 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	}
 	params.OsArch = o.Arch
 	params.Name = o.NAME
+	log.Infof("=========0 params: %#v", params)
 	return params, nil
 }

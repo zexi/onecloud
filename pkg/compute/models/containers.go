@@ -119,15 +119,20 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 	if err != nil {
 		return nil, errors.Wrapf(err, "fetch guest by %s", input.GuestId)
 	}
-	input.GuestId = obj.GetId()
-	if err := m.ValidateSpec(userCred, &input.Spec); err != nil {
+	pod := obj.(*SGuest)
+	input.GuestId = pod.GetId()
+	vols, err := m.GetPodVolumesByObject(ctx, userCred, pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetPodVolumes by pod")
+	}
+	if err := m.ValidateSpec(ctx, userCred, &input.Spec, pod, vols); err != nil {
 		return nil, errors.Wrap(err, "validate spec")
 	}
 	return input, nil
 }
 
-func (m *SContainerManager) ValidateSpec(userCred mcclient.TokenCredential, input *api.ContainerSpec) error {
-	for _, dev := range input.Devices {
+func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest, volumes []*api.PodVolume) error {
+	for _, dev := range spec.Devices {
 		devId := dev.IsolatedDeviceId
 		devObj, err := IsolatedDeviceManager.FetchByIdOrName(userCred, devId)
 		if err != nil {
@@ -139,11 +144,27 @@ func (m *SContainerManager) ValidateSpec(userCred mcclient.TokenCredential, inpu
 		}
 		dev.IsolatedDeviceId = devObj.GetId()
 	}
-	if input.ImagePullPolicy == "" {
-		input.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
+	if spec.ImagePullPolicy == "" {
+		spec.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
 	}
-	if !sets.NewString(apis.ImagePullPolicyAlways, apis.ImagePullPolicyIfNotPresent).Has(string(input.ImagePullPolicy)) {
-		return httperrors.NewInputParameterError("invalid image_pull_policy %s", input.ImagePullPolicy)
+	if !sets.NewString(apis.ImagePullPolicyAlways, apis.ImagePullPolicyIfNotPresent).Has(string(spec.ImagePullPolicy)) {
+		return httperrors.NewInputParameterError("invalid image_pull_policy %s", spec.ImagePullPolicy)
+	}
+
+	if err := m.ValidateSpecVolumeMounts(ctx, userCred, pod, volumes, spec); err != nil {
+		return errors.Wrap(err, "ValidateSpecVolumeMounts")
+	}
+
+	return nil
+}
+
+func (m *SContainerManager) ValidateSpecVolumeMounts(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, volumes []*api.PodVolume, spec *api.ContainerSpec) error {
+	relation, err := m.GetVolumeMountRelations(ctx, userCred, pod, volumes, spec)
+	if err != nil {
+		return errors.Wrap(err, "GetVolumeMountRelations")
+	}
+	if _, _, err := m.ConvertVolumeMountRelationToSpec(relation); err != nil {
+		return errors.Wrap(err, "ConvertVolumeMountRelationToSpec")
 	}
 	return nil
 }
@@ -186,6 +207,117 @@ func (c *SContainer) StartCreateTask(ctx context.Context, userCred mcclient.Toke
 
 func (c *SContainer) GetPod() *SGuest {
 	return GuestManager.FetchGuestById(c.GuestId)
+}
+
+func (m *SContainerManager) GetPodVolumes(ctx context.Context, userCred mcclient.TokenCredential, podId string) ([]*api.PodVolume, error) {
+	pod := GuestManager.FetchGuestById(podId)
+	if pod == nil {
+		return nil, errors.Wrapf(errors.ErrNotFound, "Not found pod by id %s", podId)
+	}
+	return m.GetPodVolumesByObject(ctx, userCred, pod)
+}
+
+func (m *SContainerManager) GetPodVolumesByObject(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest) ([]*api.PodVolume, error) {
+	cParams, err := pod.GetCreateParams(ctx, userCred)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get pod create params")
+	}
+	return cParams.Pod.Volumes, nil
+}
+
+func (c *SContainer) GetPodVolumes(ctx context.Context, userCred mcclient.TokenCredential) ([]*api.PodVolume, error) {
+	return GetContainerManager().GetPodVolumesByObject(ctx, userCred, c.GetPod())
+}
+
+func (c *SContainer) GetVolumeMounts() []*api.ContainerVolumeMount {
+	return c.Spec.VolumeMounts
+}
+
+func (man *SContainerManager) GetVolumeByName(volumes []*api.PodVolume, name string) *api.PodVolume {
+	for _, v := range volumes {
+		if v.Name == name {
+			return v
+		}
+	}
+	return nil
+}
+
+type ContainerVolumeMountRelation struct {
+	Name        string
+	VolumeMount *api.ContainerVolumeMount
+	Volume      *api.PodVolume
+
+	pod *SGuest
+}
+
+func (vm *ContainerVolumeMountRelation) ToMountOrDevice() (*hostapi.ContainerDevice, *hostapi.ContainerMount, error) {
+	if vm.Volume.Disk != nil {
+		dev, err := vm.ToDiskDevice(vm.Volume.Disk)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "ToDiskDevice")
+		}
+		return dev, nil, nil
+	}
+	return nil, nil, nil
+}
+
+func (vm *ContainerVolumeMountRelation) ToDiskDevice(volDisk *api.PodVolumeDisk) (*hostapi.ContainerDevice, error) {
+	// TODO: decouple this validation logic
+	if vm.pod == nil {
+		return nil, nil
+	}
+	disks, err := vm.pod.GetDisks()
+	if err != nil {
+		return nil, errors.Wrapf(err, "Get pod %s disks", vm.pod.GetId())
+	}
+	if volDisk.DiskIndex >= len(disks) {
+		return nil, errors.Errorf("disk_index %d is large than disk size %d", volDisk.DiskIndex, len(disks))
+	}
+	disk := disks[volDisk.DiskIndex]
+
+	mount := vm.VolumeMount
+	if !mount.AsRawDevice {
+		return nil, errors.Errorf("Disk must be used as raw device")
+	}
+	var devType string
+	switch disk.DiskFormat {
+	case "raw":
+		devType = api.CONTAINER_STORAGE_LOCAL_RAW
+	default:
+		return nil, errors.Errorf("unsupported disk format %s", disk.DiskFormat)
+	}
+
+	return &hostapi.ContainerDevice{
+		Type:          devType,
+		DiskId:        disk.GetId(),
+		Path:          disk.AccessPath,
+		ContainerPath: mount.RawDevicePath,
+	}, nil
+}
+
+func (m *SContainerManager) GetVolumeMountRelations(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, volumes []*api.PodVolume, spec *api.ContainerSpec) ([]*ContainerVolumeMountRelation, error) {
+	relation := make([]*ContainerVolumeMountRelation, len(spec.VolumeMounts))
+	for idx, vm := range spec.VolumeMounts {
+		vol := GetContainerManager().GetVolumeByName(volumes, vm.Name)
+		if vol == nil {
+			return nil, errors.Wrapf(errors.ErrNotFound, "find pod volume by name %s", vm.Name)
+		}
+		relation[idx] = &ContainerVolumeMountRelation{
+			Name:        vm.Name,
+			VolumeMount: vm,
+			Volume:      vol,
+			pod:         pod,
+		}
+	}
+	return relation, nil
+}
+
+func (c *SContainer) GetVolumeMountRelations(ctx context.Context, userCred mcclient.TokenCredential) ([]*ContainerVolumeMountRelation, error) {
+	vols, err := c.GetPodVolumes(ctx, userCred)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetPodVolumes")
+	}
+	return GetContainerManager().GetVolumeMountRelations(ctx, userCred, c.GetPod(), vols, c.Spec)
 }
 
 func (c *SContainer) PerformStart(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, data jsonutils.JSONObject) (jsonutils.JSONObject, error) {
@@ -255,9 +387,37 @@ func (c *SContainer) RealDelete(ctx context.Context, userCred mcclient.TokenCred
 	return c.SVirtualResourceBase.Delete(ctx, userCred)
 }
 
-func (c *SContainer) ToHostContainerSpec() (*hostapi.ContainerSpec, error) {
+func (m *SContainerManager) ConvertVolumeMountRelationToSpec(relation []*ContainerVolumeMountRelation) ([]*hostapi.ContainerDevice, []*hostapi.ContainerMount, error) {
+	devs := make([]*hostapi.ContainerDevice, 0)
+	mounts := make([]*hostapi.ContainerMount, 0)
+	for _, r := range relation {
+		dev, mount, err := r.ToMountOrDevice()
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "ToMountOrDevice: %#v", r)
+		}
+		if dev != nil {
+			devs = append(devs, dev)
+		}
+		if mount != nil {
+			mounts = append(mounts, mount)
+		}
+	}
+	return devs, mounts, nil
+}
+
+func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.TokenCredential) (*hostapi.ContainerSpec, error) {
+	vmRelation, err := c.GetVolumeMountRelations(ctx, userCred)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetVolumeMountRelations")
+	}
+	ctrDevs, mounts, err := GetContainerManager().ConvertVolumeMountRelationToSpec(vmRelation)
+	if err != nil {
+		return nil, errors.Wrap(err, "ConvertVolumeRelationToSpec")
+	}
+
 	hSpec := &hostapi.ContainerSpec{
 		ContainerSpec: c.Spec.ContainerSpec,
+		Mounts:        mounts,
 	}
 	for _, dev := range c.Spec.Devices {
 		isoDevObj, err := IsolatedDeviceManager.FetchById(dev.IsolatedDeviceId)
@@ -271,7 +431,8 @@ func (c *SContainer) ToHostContainerSpec() (*hostapi.ContainerSpec, error) {
 			Addr:             isoDev.Addr,
 			Path:             isoDev.DevicePath,
 		}
-		hSpec.Devices = append(hSpec.Devices, ctrDev)
+		ctrDevs = append(ctrDevs, ctrDev)
 	}
+	hSpec.Devices = ctrDevs
 	return hSpec, nil
 }

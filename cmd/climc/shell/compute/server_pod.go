@@ -15,6 +15,8 @@
 package compute
 
 import (
+	"yunion.io/x/log"
+
 	"yunion.io/x/onecloud/pkg/mcclient"
 	modules "yunion.io/x/onecloud/pkg/mcclient/modules/compute"
 	options "yunion.io/x/onecloud/pkg/mcclient/options/compute"
@@ -26,6 +28,7 @@ func init() {
 		if err != nil {
 			return err
 		}
+		log.Infof("======params: %#v", params)
 		if opts.Count > 1 {
 			results := modules.Servers.BatchCreate(s, params.JSON(params), opts.Count)
 			printBatchResults(results, modules.Servers.GetColumns(s))
