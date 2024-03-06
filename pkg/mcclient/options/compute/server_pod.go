@@ -41,6 +41,7 @@ type PodCreateOptions struct {
 	Args        []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
 	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
 	Volume      []string `help:"Volume specification: <name>:<type>:<info>, e.g.: raw_disk:disk:0"`
+	Device      []string `help:"Host device: <host_path>:<container_path>:<permissions>, e.g.: /dev/snd:/dev/snd:rwm"`
 
 	ServerCreateCommonConfig
 }
@@ -108,6 +109,20 @@ func parsePodVolume(volStr string) (*computeapi.PodVolume, error) {
 	}
 }
 
+func parseContainerDevice(dev string) (*computeapi.ContainerDevice, error) {
+	segs := strings.Split(dev, ":")
+	if len(segs) != 3 {
+		return nil, errors.Errorf("wrong format: %s", dev)
+	}
+	return &computeapi.ContainerDevice{
+		Host: &computeapi.ContainerHostDevice{
+			ContainerPath: segs[1],
+			HostPath:      segs[0],
+			Permissions:   segs[2],
+		},
+	}, nil
+}
+
 func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	config, err := o.ServerCreateCommonConfig.Data()
 	if err != nil {
@@ -146,6 +161,15 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		}
 	}
 
+	devs := make([]*computeapi.ContainerDevice, len(o.Device))
+	for idx, devStr := range o.Device {
+		dev, err := parseContainerDevice(devStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "parseContainerDevice")
+		}
+		devs[idx] = dev
+	}
+
 	params := &computeapi.ServerCreateInput{
 		ServerConfigs: config,
 		VcpuCount:     o.VcpuCount,
@@ -163,6 +187,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 							Envs:       nil,
 						},
 						VolumeMounts: volMounts,
+						Devices:      devs,
 					},
 				},
 			},

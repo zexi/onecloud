@@ -6,7 +6,9 @@ import (
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"strings"
 
+	losetup "github.com/zexi/golosetup"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"yunion.io/x/jsonutils"
@@ -16,6 +18,7 @@ import (
 	"yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
+	"yunion.io/x/onecloud/pkg/hostman/guestman/desc"
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils"
 	"yunion.io/x/onecloud/pkg/hostman/isolated_device"
@@ -68,7 +71,53 @@ func (s *sPodGuestInstance) CleanGuest(ctx context.Context, params interface{}) 
 	if err := s.getCRI().RemovePod(ctx, criId); err != nil {
 		return nil, errors.Wrapf(err, "RemovePod with cri_id %q", criId)
 	}
+	if err := s.cleanVolumes(); err != nil {
+		return nil, errors.Wrap(err, "clean volumes")
+	}
 	return nil, DeleteHomeDir(s)
+}
+
+func (s *sPodGuestInstance) cleanVolumes() error {
+	disks := s.GetDesc().Disks
+	input, err := s.getPodCreateParams()
+	if err != nil {
+		return errors.Wrapf(err, "getPodCreateParams")
+	}
+	vols := input.Volumes
+	for _, vol := range vols {
+		if err := s.cleanVolume(vol, disks); err != nil {
+			return errors.Wrapf(err, "clean volume %#v", vol)
+		}
+	}
+	return nil
+}
+
+func (s *sPodGuestInstance) cleanVolume(vol *computeapi.PodVolume, disks []*desc.SGuestDisk) error {
+	// TODO: use interface or move this logic to disk deletion
+	if vol.Disk != nil {
+		if err := s.cleanVolumeDisk(vol.Disk, disks); err != nil {
+			return errors.Wrapf(err, "clean disk volume %s", vol.Name)
+		}
+	}
+	return nil
+}
+
+func (s *sPodGuestInstance) cleanVolumeDisk(vol *computeapi.PodVolumeDisk, disks []*desc.SGuestDisk) error {
+	disk := disks[vol.DiskIndex]
+	devs, err := losetup.ListDevices()
+	if err != nil {
+		return errors.Wrap(err, "ListDevices")
+	}
+	for _, dev := range devs.LoopDevs {
+		if !strings.Contains(dev.BackFile, filepath.Base(disk.Path)) {
+			continue
+		}
+		log.Infof("start detach loop device %#v", dev)
+		if err := losetup.DetachDevice(dev.Name); err != nil {
+			return errors.Wrapf(err, "detach loop device %s", dev.Name)
+		}
+	}
+	return nil
 }
 
 func (s *sPodGuestInstance) ImportServer(pendingDelete bool) {
@@ -470,15 +519,23 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	}
 	if len(spec.Devices) != 0 {
 		for _, dev := range spec.Devices {
-			man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.Type))
-			if err != nil {
-				return "", errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
+			if dev.Type == computeapi.CONTAINER_DEV_HOST {
+				ctrCfg.Devices = append(ctrCfg.Devices, &runtimeapi.Device{
+					ContainerPath: dev.ContainerPath,
+					HostPath:      dev.Path,
+					Permissions:   dev.Permissions,
+				})
+			} else {
+				man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.Type))
+				if err != nil {
+					return "", errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
+				}
+				ctrDevs, err := man.NewContainerDevices(dev)
+				if err != nil {
+					return "", errors.Wrapf(err, "NewContainerDevices with %#v", dev)
+				}
+				ctrCfg.Devices = append(ctrCfg.Devices, ctrDevs...)
 			}
-			ctrDevs, err := man.NewContainerDevices(dev)
-			if err != nil {
-				return "", errors.Wrapf(err, "NewContainerDevices with %#v", dev)
-			}
-			ctrCfg.Devices = append(ctrCfg.Devices, ctrDevs...)
 		}
 	}
 	if len(spec.Command) != 0 {

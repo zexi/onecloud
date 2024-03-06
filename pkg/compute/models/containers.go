@@ -16,6 +16,7 @@ package models
 
 import (
 	"context"
+	"strings"
 
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/log"
@@ -131,18 +132,44 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 	return input, nil
 }
 
+func (m *SContainerManager) ValidateSpecHostDevice(dev *api.ContainerHostDevice) error {
+	if dev.HostPath == "" {
+		return httperrors.NewNotEmptyError("host_path is empty")
+	}
+	if dev.ContainerPath == "" {
+		return httperrors.NewNotEmptyError("container_path is empty")
+	}
+	if dev.Permissions == "" {
+		return httperrors.NewNotEmptyError("permissions is empty")
+	}
+	for _, p := range strings.Split(dev.Permissions, "") {
+		switch p {
+		case "r", "w", "m":
+		default:
+			return httperrors.NewInputParameterError("wrong permission %s", p)
+		}
+	}
+	return nil
+}
+
 func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest, volumes []*api.PodVolume) error {
 	for _, dev := range spec.Devices {
-		devId := dev.IsolatedDeviceId
-		devObj, err := IsolatedDeviceManager.FetchByIdOrName(userCred, devId)
-		if err != nil {
-			return errors.Wrapf(err, "fetch isolated device by %q", devId)
+		if dev.IsolatedDeviceId != "" {
+			devId := dev.IsolatedDeviceId
+			devObj, err := IsolatedDeviceManager.FetchByIdOrName(userCred, devId)
+			if err != nil {
+				return errors.Wrapf(err, "fetch isolated device by %q", devId)
+			}
+			devType := devObj.(*SIsolatedDevice).DevType
+			if !sets.NewString(api.VALID_CONTAINER_DEVICE_TYPES...).Has(devType) {
+				return httperrors.NewInputParameterError("device type %s is not supported by container", devType)
+			}
+			dev.IsolatedDeviceId = devObj.GetId()
+		} else if dev.Host != nil {
+			if err := m.ValidateSpecHostDevice(dev.Host); err != nil {
+				return errors.Wrap(err, "validate host device")
+			}
 		}
-		devType := devObj.(*SIsolatedDevice).DevType
-		if !sets.NewString(api.VALID_CONTAINER_DEVICE_TYPES...).Has(devType) {
-			return httperrors.NewInputParameterError("device type %s is not supported by container", devType)
-		}
-		dev.IsolatedDeviceId = devObj.GetId()
 	}
 	if spec.ImagePullPolicy == "" {
 		spec.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
@@ -420,18 +447,28 @@ func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.
 		Mounts:        mounts,
 	}
 	for _, dev := range c.Spec.Devices {
-		isoDevObj, err := IsolatedDeviceManager.FetchById(dev.IsolatedDeviceId)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Fetch isolated device by id", dev.IsolatedDeviceId)
+		if dev.IsolatedDeviceId != "" {
+			isoDevObj, err := IsolatedDeviceManager.FetchById(dev.IsolatedDeviceId)
+			if err != nil {
+				return nil, errors.Wrapf(err, "Fetch isolated device by id", dev.IsolatedDeviceId)
+			}
+			isoDev := isoDevObj.(*SIsolatedDevice)
+			ctrDev := &hostapi.ContainerDevice{
+				IsolatedDeviceId: isoDev.GetId(),
+				Type:             isoDev.DevType,
+				Addr:             isoDev.Addr,
+				Path:             isoDev.DevicePath,
+			}
+			ctrDevs = append(ctrDevs, ctrDev)
+		} else if dev.Host != nil {
+			hostDev := &hostapi.ContainerDevice{
+				Type:          api.CONTAINER_DEV_HOST,
+				Path:          dev.Host.HostPath,
+				ContainerPath: dev.Host.ContainerPath,
+				Permissions:   dev.Host.Permissions,
+			}
+			ctrDevs = append(ctrDevs, hostDev)
 		}
-		isoDev := isoDevObj.(*SIsolatedDevice)
-		ctrDev := &hostapi.ContainerDevice{
-			IsolatedDeviceId: isoDev.GetId(),
-			Type:             isoDev.DevType,
-			Addr:             isoDev.Addr,
-			Path:             isoDev.DevicePath,
-		}
-		ctrDevs = append(ctrDevs, ctrDev)
 	}
 	hSpec.Devices = ctrDevs
 	return hSpec, nil

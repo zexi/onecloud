@@ -55,6 +55,7 @@ type ContainerDevice struct {
 	Path             string `json:"path"`
 	Addr             string `json:"addr"`
 	ContainerPath    string `json:"container_path"`
+	Permissions      string `json:"permissions"`
 
 	DiskId string `json:"disk_id"`
 }
