@@ -109,10 +109,13 @@ func (s *sPodGuestInstance) cleanVolumeDisk(vol *computeapi.PodVolumeDisk, disks
 		return errors.Wrap(err, "ListDevices")
 	}
 	for _, dev := range devs.LoopDevs {
+		if disk.Path == "" {
+			continue
+		}
 		if !strings.Contains(dev.BackFile, filepath.Base(disk.Path)) {
 			continue
 		}
-		log.Infof("start detach loop device %#v", dev)
+		log.Infof("start detach loop device %#v, disk.Path %s", dev, disk.Path)
 		if err := losetup.DetachDevice(dev.Name); err != nil {
 			return errors.Wrapf(err, "detach loop device %s", dev.Name)
 		}
@@ -481,8 +484,70 @@ func (s *sPodGuestInstance) getContainerLogPath(ctrId string) string {
 	return filepath.Join(fmt.Sprintf("%s.log", ctrId))
 }
 
+func (s *sPodGuestInstance) getLxcfsMounts() []*runtimeapi.Mount {
+	lxcfsPath := "/var/lib/lxc/lxcfs"
+	return []*runtimeapi.Mount{
+		{
+			ContainerPath: "/proc/uptime",
+			HostPath:      fmt.Sprintf("%s/proc/uptime", lxcfsPath),
+			Readonly:      true,
+		},
+		{
+			ContainerPath: "/proc/meminfo",
+			HostPath:      fmt.Sprintf("%s/proc/meminfo", lxcfsPath),
+			Readonly:      true,
+		},
+		{
+			ContainerPath: "/proc/stat",
+			HostPath:      fmt.Sprintf("%s/proc/stat", lxcfsPath),
+			Readonly:      true,
+		},
+		{
+			ContainerPath: "/proc/cpuinfo",
+			HostPath:      fmt.Sprintf("%s/proc/cpuinfo", lxcfsPath),
+			Readonly:      true,
+		},
+		{
+			ContainerPath: "/proc/swaps",
+			HostPath:      fmt.Sprintf("%s/proc/swaps", lxcfsPath),
+			Readonly:      true,
+		},
+		{
+			ContainerPath: "/proc/diskstats",
+			HostPath:      fmt.Sprintf("%s/proc/diskstats", lxcfsPath),
+			Readonly:      true,
+		},
+	}
+}
+
 func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclient.TokenCredential, ctrId string, input *hostapi.ContainerCreateInput) (string, error) {
 	log.Infof("=====container input: %s", jsonutils.Marshal(input).PrettyString())
+	podCfg, err := s.getPodSandboxConfig()
+	if err != nil {
+		return "", errors.Wrap(err, "getPodSandboxConfig")
+	}
+	kboxCaps := []string{
+		"SETPCAP",
+		"AUDIT_WRITE",
+		"SYS_CHROOT",
+		"CHOWN",
+		"DAC_OVERRIDE",
+		"FOWNER",
+		"SETGID",
+		"SETUID",
+		"SYSLOG",
+		"SYS_ADMIN",
+		"WAKE_ALARM",
+		"SYS_PTRACE",
+		"BLOCK_SUSPEND",
+		"MKNOD",
+		"KILL",
+		"SYS_RESOURCE",
+		"NET_RAW",
+		"NET_ADMIN",
+		"NET_BIND_SERVICE",
+		"SYS_NICE",
+	}
 	spec := input.Spec
 	ctrCfg := &runtimeapi.ContainerConfig{
 		Metadata: &runtimeapi.ContainerMetadata{
@@ -492,9 +557,22 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 			Image: spec.Image,
 		},
 		Linux: &runtimeapi.LinuxContainerConfig{
+			//Resources: &runtimeapi.LinuxContainerResources{
+			//	CpuPeriod: 0,
+			//	CpuQuota:  0,
+			//	CpuShares: 0,
+			//	MemoryLimitInBytes:     1024 * 1024 * 4,
+			//	OomScoreAdj:            0,
+			//	CpusetCpus:             "",
+			//	CpusetMems:             "",
+			//	HugepageLimits:         nil,
+			//	Unified:                nil,
+			//	MemorySwapLimitInBytes: 0,
+			//},
 			SecurityContext: &runtimeapi.LinuxContainerSecurityContext{
 				Capabilities: &runtimeapi.Capability{
-					AddCapabilities: []string{"SYS_ADMIN"},
+					//AddCapabilities: []string{"SYS_ADMIN"},
+					AddCapabilities: kboxCaps,
 				},
 				//Privileged:         true,
 				NamespaceOptions:   nil,
@@ -514,8 +592,18 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 			},
 		},
 		LogPath: s.getContainerLogPath(ctrId),
-		Envs:    []*runtimeapi.KeyValue{},
+		Envs:    make([]*runtimeapi.KeyValue, 0),
 		Devices: []*runtimeapi.Device{},
+		Mounts:  []*runtimeapi.Mount{},
+	}
+	if spec.EnableLxcfs {
+		ctrCfg.Mounts = append(ctrCfg.Mounts, s.getLxcfsMounts()...)
+	}
+	for _, env := range spec.Envs {
+		ctrCfg.Envs = append(ctrCfg.Envs, &runtimeapi.KeyValue{
+			Key:   env.Key,
+			Value: env.Value,
+		})
 	}
 	if len(spec.Devices) != 0 {
 		for _, dev := range spec.Devices {
@@ -543,10 +631,6 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	}
 	if len(spec.Args) != 0 {
 		ctrCfg.Args = spec.Args
-	}
-	podCfg, err := s.getPodSandboxConfig()
-	if err != nil {
-		return "", errors.Wrap(err, "getPodSandboxConfig")
 	}
 	criId, err := s.getCRI().CreateContainer(ctx, s.getCRIId(), podCfg, ctrCfg, false)
 	if err != nil {

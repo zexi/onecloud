@@ -32,6 +32,8 @@ type ContainerSpec struct {
 	WorkingDir string `json:"working_dir"`
 	// List of environment variable to set in the container.
 	Envs []*ContainerKeyValue `json:"envs"`
+	// Enable lxcfs
+	EnableLxcfs bool `json:"enable_lxcfs"`
 }
 
 type ImagePullPolicy string

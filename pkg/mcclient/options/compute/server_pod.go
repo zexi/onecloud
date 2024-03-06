@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/coredns/coredns/plugin/pkg/log"
 	"yunion.io/x/pkg/errors"
 	"yunion.io/x/pkg/util/fileutils"
 	"yunion.io/x/pkg/util/regutils"
@@ -42,6 +41,8 @@ type PodCreateOptions struct {
 	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
 	Volume      []string `help:"Volume specification: <name>:<type>:<info>, e.g.: raw_disk:disk:0"`
 	Device      []string `help:"Host device: <host_path>:<container_path>:<permissions>, e.g.: /dev/snd:/dev/snd:rwm"`
+	Env         []string `help:"List of environment variable to set in the container and format is: <key>=<value>"`
+	EnableLxcfs bool     `help:"Enable lxcfs"`
 
 	ServerCreateCommonConfig
 }
@@ -170,6 +171,15 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		devs[idx] = dev
 	}
 
+	envs := make([]*apis.ContainerKeyValue, 0)
+	for _, env := range o.Env {
+		e, err := parseContainerEnv(env)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parseContainerEnv %s", env)
+		}
+		envs = append(envs, e)
+	}
+
 	params := &computeapi.ServerCreateInput{
 		ServerConfigs: config,
 		VcpuCount:     o.VcpuCount,
@@ -180,11 +190,12 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 				{
 					ContainerSpec: computeapi.ContainerSpec{
 						ContainerSpec: apis.ContainerSpec{
-							Image:      o.IMAGE,
-							Command:    o.Command,
-							Args:       o.Args,
-							WorkingDir: o.WorkingDir,
-							Envs:       nil,
+							Image:       o.IMAGE,
+							Command:     o.Command,
+							Args:        o.Args,
+							WorkingDir:  o.WorkingDir,
+							Envs:        envs,
+							EnableLxcfs: o.EnableLxcfs,
 						},
 						VolumeMounts: volMounts,
 						Devices:      devs,
@@ -193,6 +204,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 			},
 		},
 	}
+
 	if options.BoolV(o.AllowDelete) {
 		disableDelete := false
 		params.DisableDelete = &disableDelete
@@ -211,6 +223,5 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	}
 	params.OsArch = o.Arch
 	params.Name = o.NAME
-	log.Infof("=========0 params: %#v", params)
 	return params, nil
 }
