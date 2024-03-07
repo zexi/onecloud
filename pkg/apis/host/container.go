@@ -41,6 +41,11 @@ type ContainerMount struct {
 	SelinuxRelabel bool `json:"selinux_relabel,omitempty"`
 	// Requested propagation mode.
 	Propagation ContainerMountPropagation `json:"propagation,omitempty"`
+	Disk        *ContainerMountDisk       `json:"disk"`
+}
+
+type ContainerMountDisk struct {
+	Id string `json:"id"`
 }
 
 type ContainerSpec struct {

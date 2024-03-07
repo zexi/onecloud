@@ -963,8 +963,8 @@ github.com/xuri/nfp
 # github.com/yusufpapurcu/wmi v1.2.2
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
-# github.com/zexi/golosetup v0.0.0-20181117053200-8c308e8bbf44
-## explicit
+# github.com/zexi/golosetup v0.0.1
+## explicit; go 1.18
 github.com/zexi/golosetup
 # github.com/zexi/influxql-to-metricsql v0.0.6
 ## explicit; go 1.18

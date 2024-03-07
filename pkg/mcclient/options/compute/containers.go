@@ -15,6 +15,7 @@
 package compute
 
 import (
+	"strconv"
 	"strings"
 
 	"yunion.io/x/jsonutils"
@@ -39,13 +40,14 @@ type ContainerDeleteOptions struct {
 }
 
 type ContainerCreateOptions struct {
-	PODID      string   `help:"Name or id of server pod" json:"-"`
-	NAME       string   `help:"Name of container" json:"-"`
-	IMAGE      string   `help:"Image of container" json:"image"`
-	Command    []string `help:"Command to execute (i.e., entrypoint for docker)" json:"command"`
-	Args       []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
-	WorkingDir string   `help:"Current working directory of the command" json:"working_dir"`
-	Env        []string `help:"List of environment variable to set in the container and format is: <key>=<value>"`
+	PODID       string   `help:"Name or id of server pod" json:"-"`
+	NAME        string   `help:"Name of container" json:"-"`
+	IMAGE       string   `help:"Image of container" json:"image"`
+	Command     []string `help:"Command to execute (i.e., entrypoint for docker)" json:"command"`
+	Args        []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
+	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
+	Env         []string `help:"List of environment variable to set in the container and the format is: <key>=<value>"`
+	VolumeMount []string `help:"Volume mount of the container and the format is: name=<val>,mount=<container_path>,readonly=<true_or_false>,disk_index=<disk_number>,disk_id=<disk_id>"`
 }
 
 func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
@@ -59,6 +61,7 @@ func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
 				WorkingDir: o.WorkingDir,
 				Envs:       make([]*apis.ContainerKeyValue, 0),
 			},
+			VolumeMounts: make([]*computeapi.ContainerVolumeMount, 0),
 		},
 	}
 	req.Name = o.NAME
@@ -68,6 +71,13 @@ func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
 			return nil, errors.Wrapf(err, "parseContainerEnv %s", env)
 		}
 		req.Spec.Envs = append(req.Spec.Envs, e)
+	}
+	for _, vmStr := range o.VolumeMount {
+		vm, err := parseContainerVolumeMount(vmStr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parseContainerVolumeMount %s", vmStr)
+		}
+		req.Spec.VolumeMounts = append(req.Spec.VolumeMounts, vm)
 	}
 	return jsonutils.Marshal(req), nil
 }
@@ -81,6 +91,41 @@ func parseContainerEnv(env string) (*apis.ContainerKeyValue, error) {
 		Key:   kv[0],
 		Value: kv[1],
 	}, nil
+}
+
+func parseContainerVolumeMount(vmStr string) (*computeapi.ContainerVolumeMount, error) {
+	vm := &computeapi.ContainerVolumeMount{}
+	for _, seg := range strings.Split(vmStr, ",") {
+		info := strings.Split(seg, "=")
+		if len(info) != 2 {
+			return nil, errors.Errorf("invalid option %s", seg)
+		}
+		key := info[0]
+		val := info[1]
+		switch key {
+		case "readonly":
+			if strings.ToLower(val) == "true" {
+				vm.ReadOnly = true
+			}
+		case "mount_path":
+			vm.MountPath = val
+		case "disk_index":
+			if vm.Disk == nil {
+				vm.Disk = &computeapi.ContainerVolumeMountDisk{}
+			}
+			index, err := strconv.Atoi(val)
+			if err != nil {
+				return nil, errors.Wrapf(err, "wrong disk_index %s", val)
+			}
+			vm.Disk.Index = &index
+		case "disk_id":
+			if vm.Disk == nil {
+				vm.Disk = &computeapi.ContainerVolumeMountDisk{}
+			}
+			vm.Disk.Id = val
+		}
+	}
+	return vm, nil
 }
 
 type ContainerStopOptions struct {

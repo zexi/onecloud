@@ -752,6 +752,8 @@ github.com/yusufpapurcu/wmi v1.2.2 h1:KBNDSne4vP5mbSWnJbO+51IMOXJB67QiYCSBrubbPR
 github.com/yusufpapurcu/wmi v1.2.2/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 github.com/zexi/golosetup v0.0.0-20181117053200-8c308e8bbf44 h1:t8QkjgKJTQyJT7/MJJgAdRGt316wkQ0Ar3poFd1E0X0=
 github.com/zexi/golosetup v0.0.0-20181117053200-8c308e8bbf44/go.mod h1:uswjAAGley+FRw3bgWor83twfO8Ru6owCpic+Xnh2Xo=
+github.com/zexi/golosetup v0.0.1 h1:y7RRI/2xqzR2ByO3a2QTARUp5ivbC5R6zFXEx2WrInA=
+github.com/zexi/golosetup v0.0.1/go.mod h1:U4bxWs+J/Kq1/pyRHBCOk2FzqO+AYA4GTzrwgeDmWvY=
 github.com/zexi/influxql-to-metricsql v0.0.6 h1:E16T4oqgjIJtSNVvhGGHnw+pmY3yGz2iRsmmmSVuOpY=
 github.com/zexi/influxql-to-metricsql v0.0.6/go.mod h1:PyRRM+3Zrzzig6J4okYLeSv+/d+5GaL5ccBaUKQABNs=
 go.etcd.io/etcd/api/v3 v3.5.0 h1:GsV3S+OfZEOCNXdtNkBSR7kgLobAa/SO6tCxRa0GAYw=

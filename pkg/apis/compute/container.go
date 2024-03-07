@@ -109,7 +109,9 @@ type ContainerSyncStatusResponse struct {
 }
 
 type ContainerDesc struct {
-	Id string `json:"id"`
+	Id   string         `json:"id"`
+	Name string         `json:"name"`
+	Spec *ContainerSpec `json:"spec"`
 }
 
 type ContainerHostDevice struct {
@@ -130,13 +132,15 @@ type ContainerDevice struct {
 }
 
 type ContainerVolumeMount struct {
-	// This must match the Name of a Volume.
-	Name          string `json:"name"`
-	AsRawDevice   bool   `json:"as_raw_device"`
-	RawDevicePath string `json:"raw_device_path"`
+	Disk *ContainerVolumeMountDisk `json:"disk"`
 	// Mounted read-only if true, read-write otherwise (false or unspecified).
 	ReadOnly bool `json:"read_only"`
 	// Path within the container at which the volume should be mounted.  Must
 	// not contain ':'.
 	MountPath string `json:"mount_path"`
+}
+
+type ContainerVolumeMountDisk struct {
+	Index *int   `json:"index,omitempty"`
+	Id    string `json:"id"`
 }

@@ -19,6 +19,7 @@ type CRI interface {
 	Version(ctx context.Context) (*runtimeapi.VersionResponse, error)
 	ListPods(ctx context.Context, opts ListPodOptions) ([]*runtimeapi.PodSandbox, error)
 	RunPod(ctx context.Context, podConfig *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error)
+	StopPod(ctx context.Context, req *runtimeapi.StopPodSandboxRequest) error
 	RemovePod(ctx context.Context, podId string) error
 	CreateContainer(ctx context.Context, podId string, podConfig *runtimeapi.PodSandboxConfig, ctrConfig *runtimeapi.ContainerConfig, withPull bool) (string, error)
 	StartContainer(ctx context.Context, id string) error
@@ -127,6 +128,14 @@ func (c crictl) RunPod(ctx context.Context, podConfig *runtimeapi.PodSandboxConf
 		return "", errors.Wrapf(err, "RunPod with request: %s", req.String())
 	}
 	return r.GetPodSandboxId(), nil
+}
+
+func (c crictl) StopPod(ctx context.Context, req *runtimeapi.StopPodSandboxRequest) error {
+	_, err := c.getRuntimeClient().StopPodSandbox(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "StopPodSandbox")
+	}
+	return nil
 }
 
 // PullImageWithSandbox sends a PullImageRequest to the server and parses

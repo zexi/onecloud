@@ -360,10 +360,15 @@ type SGuestMetaDesc struct {
 	ExtraOptions map[string]jsonutils.JSONObject
 }
 
+type SGuestContainerDesc struct {
+	Containers []*api.ContainerDesc
+}
+
 type SGuestDesc struct {
 	SGuestProjectDesc
 	SGuestRegionDesc
 	SGuestControlDesc
 	SGuestHardwareDesc
 	SGuestMetaDesc
+	SGuestContainerDesc
 }

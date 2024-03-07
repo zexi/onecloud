@@ -39,10 +39,11 @@ type PodCreateOptions struct {
 	Command     []string `help:"Command to execute (i.e., entrypoint for docker)" json:"command"`
 	Args        []string `help:"Args for the Command (i.e. command for docker)" json:"args"`
 	WorkingDir  string   `help:"Current working directory of the command" json:"working_dir"`
-	Volume      []string `help:"Volume specification: <name>:<type>:<info>, e.g.: raw_disk:disk:0"`
+	Volume      []string `help:"Volume specification: name=<name>,disk_index=<index>, e.g.: name=disk0,disk_index=0"`
 	Device      []string `help:"Host device: <host_path>:<container_path>:<permissions>, e.g.: /dev/snd:/dev/snd:rwm"`
 	Env         []string `help:"List of environment variable to set in the container and format is: <key>=<value>"`
 	EnableLxcfs bool     `help:"Enable lxcfs"`
+	VolumeMount []string `help:"Volume mount of the container and the format is: name=<val>,mount=<container_path>,readonly=<true_or_false>"`
 
 	ServerCreateCommonConfig
 }
@@ -87,29 +88,6 @@ func parsePodPortMapping(input string) (*computeapi.PodPortMapping, error) {
 	}, nil
 }
 
-func parsePodVolume(volStr string) (*computeapi.PodVolume, error) {
-	segs := strings.Split(volStr, ":")
-	if len(segs) != 3 {
-		return nil, errors.Errorf("wrong volume string: %s", volStr)
-	}
-	name := segs[0]
-	volType := segs[1]
-	info := segs[2]
-	switch volType {
-	case "disk":
-		index, err := strconv.Atoi(info)
-		if err != nil {
-			return nil, errors.Wrapf(err, "wrong disk_index %s", info)
-		}
-		return &computeapi.PodVolume{
-			Name: name,
-			Disk: &computeapi.PodVolumeDisk{DiskIndex: index},
-		}, nil
-	default:
-		return nil, errors.Errorf("unsupported type %s", volType)
-	}
-}
-
 func parseContainerDevice(dev string) (*computeapi.ContainerDevice, error) {
 	segs := strings.Split(dev, ":")
 	if len(segs) != 3 {
@@ -142,26 +120,6 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		}
 	}
 
-	vols := make([]*computeapi.PodVolume, len(o.Volume))
-	for idx, volStr := range o.Volume {
-		vol, err := parsePodVolume(volStr)
-		if err != nil {
-			return nil, errors.Wrapf(err, "parse volume %s", volStr)
-		}
-		vols[idx] = vol
-	}
-
-	// convert volume to volumeMounts
-	// TODO: support other volume type except disk
-	volMounts := make([]*computeapi.ContainerVolumeMount, len(vols))
-	for idx, vol := range vols {
-		volMounts[idx] = &computeapi.ContainerVolumeMount{
-			Name:          vol.Name,
-			AsRawDevice:   true,
-			RawDevicePath: fmt.Sprintf("/dev/loop%d", idx),
-		}
-	}
-
 	devs := make([]*computeapi.ContainerDevice, len(o.Device))
 	for idx, devStr := range o.Device {
 		dev, err := parseContainerDevice(devStr)
@@ -180,12 +138,20 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		envs = append(envs, e)
 	}
 
+	vms := make([]*computeapi.ContainerVolumeMount, 0)
+	for _, vmStr := range o.VolumeMount {
+		vm, err := parseContainerVolumeMount(vmStr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parseContainerVolumeMount %s", vmStr)
+		}
+		vms = append(vms, vm)
+	}
+
 	params := &computeapi.ServerCreateInput{
 		ServerConfigs: config,
 		VcpuCount:     o.VcpuCount,
 		Pod: &computeapi.PodCreateInput{
 			PortMappings: portMappings,
-			Volumes:      vols,
 			Containers: []*computeapi.PodContainerCreateInput{
 				{
 					ContainerSpec: computeapi.ContainerSpec{
@@ -197,7 +163,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 							Envs:        envs,
 							EnableLxcfs: o.EnableLxcfs,
 						},
-						VolumeMounts: volMounts,
+						VolumeMounts: vms,
 						Devices:      devs,
 					},
 				},

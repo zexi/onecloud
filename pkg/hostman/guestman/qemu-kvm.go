@@ -1655,6 +1655,11 @@ func (s *SKVMGuestInstance) StartGuest(ctx context.Context, userCred mcclient.To
 	return nil
 }
 
+func (s *SKVMGuestInstance) HandleStop(ctx context.Context, timeout int64) error {
+	hostutils.DelayTaskWithoutReqctx(ctx, s.ExecStopTask, timeout)
+	return nil
+}
+
 func (s *SKVMGuestInstance) DeployFs(ctx context.Context, userCred mcclient.TokenCredential, deployInfo *deployapi.DeployInfo) (jsonutils.JSONObject, error) {
 	diskInfo := deployapi.DiskInfo{}
 	if s.isEncrypted() {

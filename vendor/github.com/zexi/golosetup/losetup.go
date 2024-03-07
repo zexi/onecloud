@@ -80,7 +80,7 @@ func GetUnusedDevice() (string, error) {
 	return strings.TrimSuffix(cmd.Output(), "\n"), nil
 }
 
-func AttachDevice(filePath string) (*Device, error) {
+func AttachDevice(filePath string, partScan bool) (*Device, error) {
 	oldDevs, err := ListDevices()
 	if err != nil {
 		return nil, err
@@ -90,7 +90,13 @@ func AttachDevice(filePath string) (*Device, error) {
 		//return nil, fmt.Errorf("file %q already attached to %q, attached twice???", oldDev.BackFile, oldDev.Name)
 		return oldDev, nil
 	}
-	_, err = NewLosetupCommand().AddArgs("-f", filePath).Run()
+
+	args := []string{}
+	if partScan {
+		args = append(args, "-P")
+	}
+	args = append(args, []string{"-f", filePath}...)
+	_, err = NewLosetupCommand().AddArgs(args...).Run()
 	if err != nil {
 		return nil, err
 	}

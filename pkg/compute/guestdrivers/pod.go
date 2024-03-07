@@ -71,11 +71,6 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 		return nil, errors.Wrap(err, "validate port mappings")
 	}
 
-	// validate volumes
-	if err := p.validateVolumes(input); err != nil {
-		return nil, errors.Wrap(err, "validate volumes")
-	}
-
 	sameName := ""
 	for idx, ctr := range input.Pod.Containers {
 		if err := p.validateContainerData(ctx, userCred, idx, input.Name, ctr, input); err != nil {
@@ -92,53 +87,6 @@ func (p *SPodDriver) ValidateCreateData(ctx context.Context, userCred mcclient.T
 	return input, nil
 }
 
-func (p *SPodDriver) validateVolumes(input *api.ServerCreateInput) error {
-	vols := input.Pod.Volumes
-	nameSets := sets.NewString()
-	for idx, vol := range vols {
-		if nameSets.Has(vol.Name) {
-			return httperrors.NewDuplicateNameError(vol.Name, fmt.Sprintf("volume %d", idx))
-		} else {
-			nameSets.Insert(vol.Name)
-		}
-		if err := p.validateVolume(input.Disks, vol); err != nil {
-			return errors.Wrapf(err, "validate volume %d", idx)
-		}
-	}
-	return nil
-}
-
-func (p *SPodDriver) validateVolume(disks []*api.DiskConfig, vol *api.PodVolume) error {
-	if vol.Name == "" {
-		return httperrors.NewNotEmptyError("volume name is required")
-	}
-	isAttrSet := false
-	if vol.Disk != nil {
-		isAttrSet = true
-		if err := p.validateVolumeDisk(disks, vol.Disk); err != nil {
-			return errors.Wrap(err, "validate volume disk")
-		}
-	}
-	if !isAttrSet {
-		return httperrors.NewNotEmptyError("One of volume type must be set")
-	}
-	return nil
-}
-
-func (p *SPodDriver) validateVolumeDisk(disks []*api.DiskConfig, volDisk *api.PodVolumeDisk) error {
-	if volDisk.DiskIndex < 0 {
-		return httperrors.NewInputParameterError("disk_index %d is less than 0", volDisk.DiskIndex)
-	}
-	if volDisk.DiskIndex >= len(disks) {
-		return httperrors.NewInputParameterError("disk_index %d is large than disk size %d", volDisk.DiskIndex, len(disks))
-	}
-	disk := disks[volDisk.DiskIndex]
-	if disk.Format != "raw" {
-		return httperrors.NewInputParameterError("disk %d format must be raw", volDisk.DiskIndex)
-	}
-	return nil
-}
-
 func (p *SPodDriver) validatePortMappings(input *api.PodCreateInput) error {
 	for idx, pm := range input.PortMappings {
 		// TODO: 判断 host port 是否重复
@@ -153,8 +101,51 @@ func (p *SPodDriver) validateContainerData(ctx context.Context, userCred mcclien
 	if ctr.Name == "" {
 		ctr.Name = fmt.Sprintf("%s-%d", defaultNamePrefix, idx)
 	}
-	if err := models.GetContainerManager().ValidateSpec(ctx, userCred, &ctr.ContainerSpec, nil, input.Pod.Volumes); err != nil {
+	if err := models.GetContainerManager().ValidateSpec(ctx, userCred, &ctr.ContainerSpec, nil, false); err != nil {
 		return errors.Wrap(err, "validate container spec")
+	}
+	if err := p.validateContainerVolumeMounts(ctx, userCred, ctr, input); err != nil {
+		return errors.Wrap(err, "validate container volumes")
+	}
+	return nil
+}
+
+func (p *SPodDriver) validateContainerVolumeMounts(ctx context.Context, userCred mcclient.TokenCredential, ctr *api.PodContainerCreateInput, input *api.ServerCreateInput) error {
+	for idx, vm := range ctr.VolumeMounts {
+		if err := p.validateContainerVolumeMount(ctx, userCred, vm, input); err != nil {
+			return errors.Wrapf(err, "validate volume mount %d", idx)
+		}
+	}
+	return nil
+}
+
+func (p *SPodDriver) validateContainerVolumeMount(ctx context.Context, userCred mcclient.TokenCredential, vm *api.ContainerVolumeMount, input *api.ServerCreateInput) error {
+	if vm.MountPath == "" {
+		return httperrors.NewNotEmptyError("mount_path is required")
+	}
+	// TODO: move below code to seperated function
+	isAttrSet := false
+	if vm.Disk != nil {
+		isAttrSet = true
+		disk := vm.Disk
+		if disk.Id != "" {
+			return httperrors.NewInputParameterError("can't specify disk_id %s when creating pod", disk.Id)
+		}
+		if disk.Index == nil {
+			return httperrors.NewNotEmptyError("disk.index is required")
+		}
+		diskIndex := *disk.Index
+		disks := input.Disks
+		if diskIndex < 0 {
+			return httperrors.NewInputParameterError("disk.index %d is less than 0", diskIndex)
+		}
+		if diskIndex >= len(disks) {
+			return httperrors.NewInputParameterError("disk.index %d is large than disk size %d", diskIndex, len(disks))
+		}
+		return nil
+	}
+	if !isAttrSet {
+		return httperrors.NewNotEmptyError("One of volume mount type must be set")
 	}
 	return nil
 }
@@ -249,10 +240,6 @@ func (p *SPodDriver) RequestStartOnHost(ctx context.Context, guest *models.SGues
 	return nil
 }
 
-func (p *SPodDriver) RequestStopOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask, syncStatus bool) error {
-	return p.newUnsupportOperationError("stop")
-}
-
 func (p *SPodDriver) RqeuestSuspendOnHost(ctx context.Context, guest *models.SGuest, task taskman.ITask) error {
 	return p.newUnsupportOperationError("suspend")
 }
@@ -268,12 +255,6 @@ func (p *SPodDriver) GetGuestVncInfo(ctx context.Context, userCred mcclient.Toke
 func (p *SPodDriver) OnGuestDeployTaskDataReceived(ctx context.Context, guest *models.SGuest, task taskman.ITask, data jsonutils.JSONObject) error {
 	//guest.SaveDeployInfo(ctx, task.GetUserCred(), data)
 	// do nothing here
-	return nil
-}
-
-func (p *SPodDriver) RequestStopGuestForDelete(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask) error {
-	// do nothing, call next stage
-	task.ScheduleRun(nil)
 	return nil
 }
 
@@ -294,10 +275,44 @@ func (p *SPodDriver) RequestUndeployPod(ctx context.Context, guest *models.SGues
 
 func (p *SPodDriver) GetJsonDescAtHost(ctx context.Context, userCred mcclient.TokenCredential, guest *models.SGuest, host *models.SHost, params *jsonutils.JSONDict) (jsonutils.JSONObject, error) {
 	desc := guest.GetJsonDescAtHypervisor(ctx, host)
+	ctrs, err := models.GetContainerManager().GetContainersByPod(guest.GetId())
+	if err != nil {
+		return nil, errors.Wrap(err, "GetContainersByPod")
+	}
+	ctrDescs := make([]*api.ContainerDesc, len(ctrs))
+	for idx, ctr := range ctrs {
+		ctrDescs[idx] = ctr.GetJsonDescAtHost()
+	}
+	desc.Containers = ctrDescs
 	return jsonutils.Marshal(desc), nil
 }
 
+func (p *SPodDriver) createContainersOnPod(ctx context.Context, userCred mcclient.TokenCredential, guest *models.SGuest) error {
+	input, err := guest.GetCreateParams(ctx, userCred)
+	if err != nil {
+		return errors.Wrap(err, "GetCreateParams")
+	}
+	ctrs := make([]*models.SContainer, len(input.Pod.Containers))
+	for idx, ctr := range input.Pod.Containers {
+		if obj, err := models.GetContainerManager().CreateOnPod(ctx, userCred, guest.GetOwnerId(), guest, ctr); err != nil {
+			return errors.Wrapf(err, "create container on pod: %s", guest.GetName())
+		} else {
+			ctrs[idx] = obj
+		}
+	}
+	return nil
+}
+
 func (p *SPodDriver) RequestDeployGuestOnHost(ctx context.Context, guest *models.SGuest, host *models.SHost, task taskman.ITask) error {
+	deployAction, err := task.GetParams().GetString("deploy_action")
+	if err != nil {
+		return errors.Wrapf(err, "get deploy_action from task params: %s", task.GetParams())
+	}
+	if deployAction == "create" {
+		if err := p.createContainersOnPod(ctx, task.GetUserCred(), guest); err != nil {
+			return errors.Wrap(err, "create containers on pod")
+		}
+	}
 	config, err := guest.GetDeployConfigOnHost(ctx, task.GetUserCred(), host, task.GetParams())
 	if err != nil {
 		log.Errorf("GetDeployConfigOnHost error: %v", err)

@@ -122,11 +122,7 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 	}
 	pod := obj.(*SGuest)
 	input.GuestId = pod.GetId()
-	vols, err := m.GetPodVolumesByObject(ctx, userCred, pod)
-	if err != nil {
-		return nil, errors.Wrap(err, "GetPodVolumes by pod")
-	}
-	if err := m.ValidateSpec(ctx, userCred, &input.Spec, pod, vols); err != nil {
+	if err := m.ValidateSpec(ctx, userCred, &input.Spec, pod, true); err != nil {
 		return nil, errors.Wrap(err, "validate spec")
 	}
 	return input, nil
@@ -152,7 +148,7 @@ func (m *SContainerManager) ValidateSpecHostDevice(dev *api.ContainerHostDevice)
 	return nil
 }
 
-func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest, volumes []*api.PodVolume) error {
+func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest, validateVolumeMount bool) error {
 	for _, dev := range spec.Devices {
 		if dev.IsolatedDeviceId != "" {
 			devId := dev.IsolatedDeviceId
@@ -178,22 +174,76 @@ func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.
 		return httperrors.NewInputParameterError("invalid image_pull_policy %s", spec.ImagePullPolicy)
 	}
 
-	if err := m.ValidateSpecVolumeMounts(ctx, userCred, pod, volumes, spec); err != nil {
-		return errors.Wrap(err, "ValidateSpecVolumeMounts")
+	if validateVolumeMount {
+		if err := m.ValidateSpecVolumeMounts(ctx, userCred, pod, spec); err != nil {
+			return errors.Wrap(err, "ValidateSpecVolumeMounts")
+		}
 	}
 
 	return nil
 }
 
-func (m *SContainerManager) ValidateSpecVolumeMounts(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, volumes []*api.PodVolume, spec *api.ContainerSpec) error {
-	relation, err := m.GetVolumeMountRelations(ctx, userCred, pod, volumes, spec)
+func (m *SContainerManager) ValidateSpecVolumeMounts(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, spec *api.ContainerSpec) error {
+	relation, err := m.GetVolumeMountRelations(ctx, userCred, pod, spec)
 	if err != nil {
 		return errors.Wrap(err, "GetVolumeMountRelations")
 	}
-	if _, _, err := m.ConvertVolumeMountRelationToSpec(relation); err != nil {
+	disks, err := pod.GetDisks()
+	if err != nil {
+		return errors.Wrap(err, "GetDisks")
+	}
+	for idx, vm := range spec.VolumeMounts {
+		newVm, err := m.ValidateSpecVolumeMount(ctx, userCred, pod, disks, vm)
+		if err != nil {
+			return errors.Wrapf(err, "validate volume mount %s", jsonutils.Marshal(vm))
+		}
+		spec.VolumeMounts[idx] = newVm
+	}
+	if _, err := m.ConvertVolumeMountRelationToSpec(relation); err != nil {
 		return errors.Wrap(err, "ConvertVolumeMountRelationToSpec")
 	}
 	return nil
+}
+
+func (m *SContainerManager) ValidateSpecVolumeMount(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, disks []SDisk, vm *api.ContainerVolumeMount) (*api.ContainerVolumeMount, error) {
+	if vm.MountPath == "" {
+		return nil, httperrors.NewNotEmptyError("mount_path is required")
+	}
+	if vm.Disk != nil {
+		return m.ValidateSpecVolumeMountDisk(ctx, userCred, pod, disks, vm)
+	}
+	return nil, httperrors.NewNotEmptyError("One of volume mount type must be set")
+}
+
+func (m *SContainerManager) ValidateSpecVolumeMountDisk(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, disks []SDisk, vm *api.ContainerVolumeMount) (*api.ContainerVolumeMount, error) {
+	disk := vm.Disk
+	if disk.Index != nil {
+		diskIndex := *disk.Index
+		if diskIndex < 0 {
+			return nil, httperrors.NewInputParameterError("disk.index %d is less than 0", diskIndex)
+		}
+		if diskIndex >= len(disks) {
+			return nil, httperrors.NewInputParameterError("disk.index %d is large than disk size %d", diskIndex, len(disks))
+		}
+		vm.Disk.Id = disks[diskIndex].GetId()
+		// remove index
+		vm.Disk.Index = nil
+	}
+	if disk.Id == "" {
+		return nil, httperrors.NewNotEmptyError("disk.id is empty")
+	}
+	foundDisk := false
+	for _, d := range disks {
+		if d.GetId() == disk.Id || d.GetName() == disk.Id {
+			disk.Id = d.GetId()
+			foundDisk = true
+			break
+		}
+	}
+	if !foundDisk {
+		return nil, httperrors.NewNotFoundError("not found disk by %s", disk.Id)
+	}
+	return vm, nil
 }
 
 /*func (m *SContainerManager) GetContainerIndex(guestId string) (int, error) {
@@ -236,103 +286,65 @@ func (c *SContainer) GetPod() *SGuest {
 	return GuestManager.FetchGuestById(c.GuestId)
 }
 
-func (m *SContainerManager) GetPodVolumes(ctx context.Context, userCred mcclient.TokenCredential, podId string) ([]*api.PodVolume, error) {
-	pod := GuestManager.FetchGuestById(podId)
-	if pod == nil {
-		return nil, errors.Wrapf(errors.ErrNotFound, "Not found pod by id %s", podId)
-	}
-	return m.GetPodVolumesByObject(ctx, userCred, pod)
-}
-
-func (m *SContainerManager) GetPodVolumesByObject(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest) ([]*api.PodVolume, error) {
-	cParams, err := pod.GetCreateParams(ctx, userCred)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get pod create params")
-	}
-	return cParams.Pod.Volumes, nil
-}
-
-func (c *SContainer) GetPodVolumes(ctx context.Context, userCred mcclient.TokenCredential) ([]*api.PodVolume, error) {
-	return GetContainerManager().GetPodVolumesByObject(ctx, userCred, c.GetPod())
-}
-
 func (c *SContainer) GetVolumeMounts() []*api.ContainerVolumeMount {
 	return c.Spec.VolumeMounts
 }
 
-func (man *SContainerManager) GetVolumeByName(volumes []*api.PodVolume, name string) *api.PodVolume {
-	for _, v := range volumes {
-		if v.Name == name {
-			return v
-		}
-	}
-	return nil
-}
-
 type ContainerVolumeMountRelation struct {
-	Name        string
 	VolumeMount *api.ContainerVolumeMount
-	Volume      *api.PodVolume
 
 	pod *SGuest
 }
 
-func (vm *ContainerVolumeMountRelation) ToMountOrDevice() (*hostapi.ContainerDevice, *hostapi.ContainerMount, error) {
-	if vm.Volume.Disk != nil {
-		dev, err := vm.ToDiskDevice(vm.Volume.Disk)
+func (vm *ContainerVolumeMountRelation) ToHostMount() (*hostapi.ContainerMount, error) {
+	if vm.VolumeMount.Disk != nil {
+		mount, err := vm.ToHostDiskMount(vm.VolumeMount.Disk)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "ToDiskDevice")
+			return nil, errors.Wrap(err, "ToDiskMount")
 		}
-		return dev, nil, nil
+		return mount, nil
 	}
-	return nil, nil, nil
+	return nil, nil
 }
 
-func (vm *ContainerVolumeMountRelation) ToDiskDevice(volDisk *api.PodVolumeDisk) (*hostapi.ContainerDevice, error) {
-	// TODO: decouple this validation logic
-	if vm.pod == nil {
-		return nil, nil
+func (vm *ContainerVolumeMountRelation) ToHostDiskMount(volDisk *api.ContainerVolumeMountDisk) (*hostapi.ContainerMount, error) {
+	if volDisk.Id == "" {
+		return nil, httperrors.NewNotEmptyError("disk id is empty")
 	}
 	disks, err := vm.pod.GetDisks()
 	if err != nil {
 		return nil, errors.Wrapf(err, "Get pod %s disks", vm.pod.GetId())
 	}
-	if volDisk.DiskIndex >= len(disks) {
-		return nil, errors.Errorf("disk_index %d is large than disk size %d", volDisk.DiskIndex, len(disks))
+	var disk *SDisk = nil
+	for _, dd := range disks {
+		if volDisk.Id == dd.GetId() {
+			disk = &dd
+			break
+		}
 	}
-	disk := disks[volDisk.DiskIndex]
+	if disk == nil {
+		return nil, errors.Wrapf(httperrors.ErrNotFound, "not found disk by id %s", volDisk.Id)
+	}
 
 	mount := vm.VolumeMount
-	if !mount.AsRawDevice {
-		return nil, errors.Errorf("Disk must be used as raw device")
-	}
-	var devType string
-	switch disk.DiskFormat {
-	case "raw":
-		devType = api.CONTAINER_STORAGE_LOCAL_RAW
-	default:
-		return nil, errors.Errorf("unsupported disk format %s", disk.DiskFormat)
+	if disk.FsFormat == "" {
+		return nil, httperrors.NewNotEmptyError("filesystem format is required")
 	}
 
-	return &hostapi.ContainerDevice{
-		Type:          devType,
-		DiskId:        disk.GetId(),
-		Path:          disk.AccessPath,
-		ContainerPath: mount.RawDevicePath,
+	return &hostapi.ContainerMount{
+		Disk:          &hostapi.ContainerMountDisk{Id: disk.Id},
+		ContainerPath: mount.MountPath,
+		Readonly:      mount.ReadOnly,
+		// TODO: add propagation
 	}, nil
 }
 
-func (m *SContainerManager) GetVolumeMountRelations(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, volumes []*api.PodVolume, spec *api.ContainerSpec) ([]*ContainerVolumeMountRelation, error) {
+func (m *SContainerManager) GetVolumeMountRelations(ctx context.Context, userCred mcclient.TokenCredential, pod *SGuest, spec *api.ContainerSpec) ([]*ContainerVolumeMountRelation, error) {
 	relation := make([]*ContainerVolumeMountRelation, len(spec.VolumeMounts))
 	for idx, vm := range spec.VolumeMounts {
-		vol := GetContainerManager().GetVolumeByName(volumes, vm.Name)
-		if vol == nil {
-			return nil, errors.Wrapf(errors.ErrNotFound, "find pod volume by name %s", vm.Name)
-		}
+		tmpVm := vm
 		relation[idx] = &ContainerVolumeMountRelation{
-			Name:        vm.Name,
-			VolumeMount: vm,
-			Volume:      vol,
+			VolumeMount: tmpVm,
 			pod:         pod,
 		}
 	}
@@ -340,11 +352,7 @@ func (m *SContainerManager) GetVolumeMountRelations(ctx context.Context, userCre
 }
 
 func (c *SContainer) GetVolumeMountRelations(ctx context.Context, userCred mcclient.TokenCredential) ([]*ContainerVolumeMountRelation, error) {
-	vols, err := c.GetPodVolumes(ctx, userCred)
-	if err != nil {
-		return nil, errors.Wrap(err, "GetPodVolumes")
-	}
-	return GetContainerManager().GetVolumeMountRelations(ctx, userCred, c.GetPod(), vols, c.Spec)
+	return GetContainerManager().GetVolumeMountRelations(ctx, userCred, c.GetPod(), c.Spec)
 }
 
 func (c *SContainer) PerformStart(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, data jsonutils.JSONObject) (jsonutils.JSONObject, error) {
@@ -414,22 +422,18 @@ func (c *SContainer) RealDelete(ctx context.Context, userCred mcclient.TokenCred
 	return c.SVirtualResourceBase.Delete(ctx, userCred)
 }
 
-func (m *SContainerManager) ConvertVolumeMountRelationToSpec(relation []*ContainerVolumeMountRelation) ([]*hostapi.ContainerDevice, []*hostapi.ContainerMount, error) {
-	devs := make([]*hostapi.ContainerDevice, 0)
+func (m *SContainerManager) ConvertVolumeMountRelationToSpec(relation []*ContainerVolumeMountRelation) ([]*hostapi.ContainerMount, error) {
 	mounts := make([]*hostapi.ContainerMount, 0)
 	for _, r := range relation {
-		dev, mount, err := r.ToMountOrDevice()
+		mount, err := r.ToHostMount()
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "ToMountOrDevice: %#v", r)
-		}
-		if dev != nil {
-			devs = append(devs, dev)
+			return nil, errors.Wrapf(err, "ToMountOrDevice: %#v", r)
 		}
 		if mount != nil {
 			mounts = append(mounts, mount)
 		}
 	}
-	return devs, mounts, nil
+	return mounts, nil
 }
 
 func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.TokenCredential) (*hostapi.ContainerSpec, error) {
@@ -437,7 +441,7 @@ func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.
 	if err != nil {
 		return nil, errors.Wrap(err, "GetVolumeMountRelations")
 	}
-	ctrDevs, mounts, err := GetContainerManager().ConvertVolumeMountRelationToSpec(vmRelation)
+	mounts, err := GetContainerManager().ConvertVolumeMountRelationToSpec(vmRelation)
 	if err != nil {
 		return nil, errors.Wrap(err, "ConvertVolumeRelationToSpec")
 	}
@@ -446,6 +450,7 @@ func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.
 		ContainerSpec: c.Spec.ContainerSpec,
 		Mounts:        mounts,
 	}
+	ctrDevs := make([]*hostapi.ContainerDevice, 0)
 	for _, dev := range c.Spec.Devices {
 		if dev.IsolatedDeviceId != "" {
 			isoDevObj, err := IsolatedDeviceManager.FetchById(dev.IsolatedDeviceId)
@@ -472,4 +477,12 @@ func (c *SContainer) ToHostContainerSpec(ctx context.Context, userCred mcclient.
 	}
 	hSpec.Devices = ctrDevs
 	return hSpec, nil
+}
+
+func (c *SContainer) GetJsonDescAtHost() *api.ContainerDesc {
+	return &api.ContainerDesc{
+		Id:   c.GetId(),
+		Name: c.GetName(),
+		Spec: c.Spec,
+	}
 }

@@ -40,7 +40,7 @@ func (l localLoopDiskManager) NewContainerDevices(dev *hostapi.ContainerDevice) 
 		return nil, errors.Errorf("disk %s format isn't raw", dev.DiskId)
 	}
 	dPath := disk.GetPath()
-	loDev, err := losetup.AttachDevice(dPath)
+	loDev, err := losetup.AttachDevice(dPath, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to attach %s as loop device", dPath)
 	}

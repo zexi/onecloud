@@ -54,21 +54,12 @@ func (t *PodCreateTask) OnWaitPodCreated(ctx context.Context, obj db.IStandalone
 
 func (t *PodCreateTask) OnPodCreated(ctx context.Context, guest *models.SGuest, data jsonutils.JSONObject) {
 	t.SetStage("OnContainerCreated", nil)
-	input, err := guest.GetCreateParams(ctx, t.GetUserCred())
-	if err != nil {
-		t.onError(ctx, errors.Wrap(err, "GetCreateParams"))
-		return
-	}
 
 	guest.SetStatus(t.GetUserCred(), api.POD_STATUS_CREATING_CONTAINER, "")
-	ctrs := make([]*models.SContainer, len(input.Pod.Containers))
-	for idx, ctr := range input.Pod.Containers {
-		if obj, err := models.GetContainerManager().CreateOnPod(ctx, t.GetUserCred(), guest.GetOwnerId(), guest, ctr); err != nil {
-			t.onCreateContainerError(ctx, guest, errors.Wrapf(err, "create container on pod: %s", guest.GetName()))
-			return
-		} else {
-			ctrs[idx] = obj
-		}
+	ctrs, err := models.GetContainerManager().GetContainersByPod(guest.GetId())
+	if err != nil {
+		t.onCreateContainerError(ctx, guest, errors.Wrapf(err, "get containers by pod %s", guest.GetId()))
+		return
 	}
 
 	for idx, ctr := range ctrs {

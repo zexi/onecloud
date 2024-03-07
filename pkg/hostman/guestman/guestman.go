@@ -228,10 +228,10 @@ func (m *SGuestManager) GetKVMServer(sid string) (*SKVMGuestInstance, bool) {
 	return s.(*SKVMGuestInstance), true
 }
 
-func (m *SGuestManager) GetUnknownServer(sid string) (*SKVMGuestInstance, bool) {
+func (m *SGuestManager) GetUnknownServer(sid string) (GuestRuntimeInstance, bool) {
 	s, ok := m.UnknownServers.Load(sid)
 	if ok {
-		return s.(*SKVMGuestInstance), ok
+		return s.(GuestRuntimeInstance), ok
 	} else {
 		return nil, ok
 	}
@@ -709,7 +709,6 @@ func (m *SGuestManager) GuestCreate(ctx context.Context, params interface{}) (js
 	if !ok {
 		return nil, hostutils.ParamsError
 	}
-	log.Infof("===========params: %#v", params)
 
 	var guest GuestRuntimeInstance
 	e := func() error {
@@ -879,12 +878,14 @@ func (m *SGuestManager) GuestStart(ctx context.Context, userCred mcclient.TokenC
 }
 
 func (m *SGuestManager) GuestStop(ctx context.Context, sid string, timeout int64) error {
-	if guest, ok := m.GetKVMServer(sid); ok {
-		hostutils.DelayTaskWithoutReqctx(ctx, guest.ExecStopTask, timeout)
-		return nil
+	if server, ok := m.GetServer(sid); ok {
+		if err := server.HandleStop(ctx, timeout); err != nil {
+			return errors.Wrap(err, "Do stop")
+		}
 	} else {
 		return httperrors.NewNotFoundError("Guest %s not found", sid)
 	}
+	return nil
 }
 
 func (m *SGuestManager) GuestStartRescue(ctx context.Context, userCred mcclient.TokenCredential, sid string, body jsonutils.JSONObject) (jsonutils.JSONObject, error) {

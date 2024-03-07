@@ -47,19 +47,9 @@ type PodPortMapping struct {
 	HostIp        string                 `json:"host_ip"`
 }
 
-type PodVolume struct {
-	Name string         `json:"name"`
-	Disk *PodVolumeDisk `json:"disk"`
-}
-
-type PodVolumeDisk struct {
-	DiskIndex int `json:"disk_index"`
-}
-
 type PodCreateInput struct {
 	Containers   []*PodContainerCreateInput `json:"containers"`
 	PortMappings []*PodPortMapping          `json:"port_mappings"`
-	Volumes      []*PodVolume               `json:"volumes"`
 }
 
 type PodStartResponse struct {

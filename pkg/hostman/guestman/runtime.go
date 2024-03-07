@@ -44,6 +44,8 @@ type GuestRuntimeInstance interface {
 	HandleGuestStatus(ctx context.Context, status string, body *jsonutils.JSONDict) (jsonutils.JSONObject, error)
 	HandleGuestStart(ctx context.Context, userCred mcclient.TokenCredential, body jsonutils.JSONObject) (jsonutils.JSONObject, error)
 
+	HandleStop(ctx context.Context, timeout int64) error
+
 	LoadDesc() error
 	PostLoad(m *SGuestManager) error
 }
