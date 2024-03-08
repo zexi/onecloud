@@ -138,7 +138,7 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		envs = append(envs, e)
 	}
 
-	vms := make([]*computeapi.ContainerVolumeMount, 0)
+	vms := make([]*apis.ContainerVolumeMount, 0)
 	for _, vmStr := range o.VolumeMount {
 		vm, err := parseContainerVolumeMount(vmStr)
 		if err != nil {
@@ -156,15 +156,15 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 				{
 					ContainerSpec: computeapi.ContainerSpec{
 						ContainerSpec: apis.ContainerSpec{
-							Image:       o.IMAGE,
-							Command:     o.Command,
-							Args:        o.Args,
-							WorkingDir:  o.WorkingDir,
-							Envs:        envs,
-							EnableLxcfs: o.EnableLxcfs,
+							Image:        o.IMAGE,
+							Command:      o.Command,
+							Args:         o.Args,
+							WorkingDir:   o.WorkingDir,
+							Envs:         envs,
+							EnableLxcfs:  o.EnableLxcfs,
+							VolumeMounts: vms,
 						},
-						VolumeMounts: vms,
-						Devices:      devs,
+						Devices: devs,
 					},
 				},
 			},
@@ -184,8 +184,12 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 	} else {
 		return nil, fmt.Errorf("Invalid memory input: %q", o.MEM)
 	}
-	for _, dev := range o.IsolatedDevice {
-		params.Pod.Containers[0].Devices = append(params.Pod.Containers[0].Devices, &computeapi.ContainerDevice{IsolatedDeviceId: dev})
+	for idx := range o.IsolatedDevice {
+		params.Pod.Containers[0].Devices = append(
+			params.Pod.Containers[0].Devices,
+			&computeapi.ContainerDevice{
+				IsolatedDevice: &computeapi.ContainerIsolatedDevice{Index: &idx},
+			})
 	}
 	params.OsArch = o.Arch
 	params.Name = o.NAME

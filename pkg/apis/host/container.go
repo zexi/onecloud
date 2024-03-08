@@ -16,53 +16,33 @@ package host
 
 import "yunion.io/x/onecloud/pkg/apis"
 
-type ContainerMountPropagation string
-
-const (
-	// No mount propagation ("private" in Linux terminology).
-	MountPropagation_PROPAGATION_PRIVATE ContainerMountPropagation = "private"
-	// Mounts get propagated from the host to the container ("rslave" in Linux).
-	MountPropagation_PROPAGATION_HOST_TO_CONTAINER ContainerMountPropagation = "rslave"
-	// Mounts get propagated from the host to the container and from the
-	// container to the host ("rshared" in Linux).
-	MountPropagation_PROPAGATION_BIDIRECTIONAL ContainerMountPropagation = "rshared"
-)
-
-type ContainerMount struct {
-	// Path of the mount within the container.
-	ContainerPath string `json:"container_path,omitempty"`
-	// Path of the mount on the host. If the hostPath doesn't exist, then runtimes
-	// should report error. If the hostpath is a symbolic link, runtimes should
-	// follow the symlink and mount the real destination to container.
-	HostPath string `json:"host_path,omitempty"`
-	// If set, the mount is read-only.
-	Readonly bool `json:"readonly,omitempty"`
-	// If set, the mount needs SELinux relabeling.
-	SelinuxRelabel bool `json:"selinux_relabel,omitempty"`
-	// Requested propagation mode.
-	Propagation ContainerMountPropagation `json:"propagation,omitempty"`
-	Disk        *ContainerMountDisk       `json:"disk"`
-}
-
-type ContainerMountDisk struct {
-	Id string `json:"id"`
-}
-
 type ContainerSpec struct {
 	apis.ContainerSpec
 	Devices []*ContainerDevice `json:"devices"`
-	Mounts  []*ContainerMount  `json:"mounts"`
 }
 
 type ContainerDevice struct {
-	IsolatedDeviceId string `json:"isolated_device_id"`
-	Type             string `json:"type"`
-	Path             string `json:"path"`
-	Addr             string `json:"addr"`
-	ContainerPath    string `json:"container_path"`
-	Permissions      string `json:"permissions"`
+	Type           apis.ContainerDeviceType `json:"type"`
+	ContainerPath  string                   `json:"container_path"`
+	Permissions    string                   `json:"permissions"`
+	IsolatedDevice *ContainerIsolatedDevice `json:"isolated_device"`
+	Host           *ContainerHostDevice     `json:"host"`
+	Disk           *ContainerDiskDevice     `json:"disk"`
+}
 
-	DiskId string `json:"disk_id"`
+type ContainerIsolatedDevice struct {
+	Id   string `json:"device_id"`
+	Addr string `json:"addr"`
+	Path string `json:"path"`
+}
+
+type ContainerHostDevice struct {
+	// Path of the device on the host.
+	HostPath string `json:"host_path"`
+}
+
+type ContainerDiskDevice struct {
+	Id string `json:"id"`
 }
 
 type ContainerCreateInput struct {

@@ -55,13 +55,13 @@ func (o *ContainerCreateOptions) Params() (jsonutils.JSONObject, error) {
 		GuestId: o.PODID,
 		Spec: computeapi.ContainerSpec{
 			ContainerSpec: apis.ContainerSpec{
-				Image:      o.IMAGE,
-				Command:    o.Command,
-				Args:       o.Args,
-				WorkingDir: o.WorkingDir,
-				Envs:       make([]*apis.ContainerKeyValue, 0),
+				Image:        o.IMAGE,
+				Command:      o.Command,
+				Args:         o.Args,
+				WorkingDir:   o.WorkingDir,
+				Envs:         make([]*apis.ContainerKeyValue, 0),
+				VolumeMounts: make([]*apis.ContainerVolumeMount, 0),
 			},
-			VolumeMounts: make([]*computeapi.ContainerVolumeMount, 0),
 		},
 	}
 	req.Name = o.NAME
@@ -93,8 +93,8 @@ func parseContainerEnv(env string) (*apis.ContainerKeyValue, error) {
 	}, nil
 }
 
-func parseContainerVolumeMount(vmStr string) (*computeapi.ContainerVolumeMount, error) {
-	vm := &computeapi.ContainerVolumeMount{}
+func parseContainerVolumeMount(vmStr string) (*apis.ContainerVolumeMount, error) {
+	vm := &apis.ContainerVolumeMount{}
 	for _, seg := range strings.Split(vmStr, ",") {
 		info := strings.Split(seg, "=")
 		if len(info) != 2 {
@@ -103,15 +103,22 @@ func parseContainerVolumeMount(vmStr string) (*computeapi.ContainerVolumeMount, 
 		key := info[0]
 		val := info[1]
 		switch key {
-		case "readonly":
+		case "read_only", "ro", "readonly":
 			if strings.ToLower(val) == "true" {
 				vm.ReadOnly = true
 			}
 		case "mount_path":
 			vm.MountPath = val
+		case "host_path":
+			if vm.HostPath == nil {
+				vm.HostPath = &apis.ContainerVolumeMountHostPath{}
+			}
+			vm.Type = apis.CONTAINER_VOLUME_MOUNT_TYPE_HOST_PATH
+			vm.HostPath.Path = val
 		case "disk_index":
+			vm.Type = apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK
 			if vm.Disk == nil {
-				vm.Disk = &computeapi.ContainerVolumeMountDisk{}
+				vm.Disk = &apis.ContainerVolumeMountDisk{}
 			}
 			index, err := strconv.Atoi(val)
 			if err != nil {
@@ -119,8 +126,9 @@ func parseContainerVolumeMount(vmStr string) (*computeapi.ContainerVolumeMount, 
 			}
 			vm.Disk.Index = &index
 		case "disk_id":
+			vm.Type = apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK
 			if vm.Disk == nil {
-				vm.Disk = &computeapi.ContainerVolumeMountDisk{}
+				vm.Disk = &apis.ContainerVolumeMountDisk{}
 			}
 			vm.Disk.Id = val
 		}

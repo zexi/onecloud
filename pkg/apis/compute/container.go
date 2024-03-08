@@ -37,10 +37,6 @@ const (
 )
 
 const (
-	CONTAINER_DEV_HOST = "HOST"
-)
-
-const (
 	CONTAINER_STORAGE_LOCAL_RAW = "local_raw"
 )
 
@@ -72,8 +68,7 @@ type ContainerSpec struct {
 	apis.ContainerSpec
 	// Mounts for the container.
 	// Mounts []*ContainerMount `json:"mounts"`
-	Devices      []*ContainerDevice      `json:"devices"`
-	VolumeMounts []*ContainerVolumeMount `json:"volume_mounts"`
+	Devices []*ContainerDevice `json:"devices"`
 }
 
 func (c *ContainerSpec) String() string {
@@ -126,21 +121,13 @@ type ContainerHostDevice struct {
 	Permissions string `json:"permissions"`
 }
 
-type ContainerDevice struct {
-	IsolatedDeviceId string               `json:"isolated_device_id"`
-	Host             *ContainerHostDevice `json:"host"`
-}
-
-type ContainerVolumeMount struct {
-	Disk *ContainerVolumeMountDisk `json:"disk"`
-	// Mounted read-only if true, read-write otherwise (false or unspecified).
-	ReadOnly bool `json:"read_only"`
-	// Path within the container at which the volume should be mounted.  Must
-	// not contain ':'.
-	MountPath string `json:"mount_path"`
-}
-
-type ContainerVolumeMountDisk struct {
-	Index *int   `json:"index,omitempty"`
+type ContainerIsolatedDevice struct {
+	Index *int   `json:"index"`
 	Id    string `json:"id"`
+}
+
+type ContainerDevice struct {
+	Type           apis.ContainerDeviceType `json:"type"`
+	IsolatedDevice *ContainerIsolatedDevice `json:"isolated_device"`
+	Host           *ContainerHostDevice     `json:"host"`
 }

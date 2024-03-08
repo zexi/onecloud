@@ -17,11 +17,11 @@ import (
 	"yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
-	container_storage "yunion.io/x/onecloud/pkg/hostman/container/storage"
+	"yunion.io/x/onecloud/pkg/hostman/container/device"
+	"yunion.io/x/onecloud/pkg/hostman/container/volume_mount"
 	"yunion.io/x/onecloud/pkg/hostman/guestman/desc"
 	deployapi "yunion.io/x/onecloud/pkg/hostman/hostdeployer/apis"
 	"yunion.io/x/onecloud/pkg/hostman/hostutils"
-	"yunion.io/x/onecloud/pkg/hostman/isolated_device"
 	"yunion.io/x/onecloud/pkg/hostman/options"
 	"yunion.io/x/onecloud/pkg/hostman/storageman"
 	"yunion.io/x/onecloud/pkg/httperrors"
@@ -192,98 +192,30 @@ func (s *sPodGuestInstance) getPodLogDir() string {
 	return filepath.Join(s.HomeDir(), "logs")
 }
 
-type PodVolumeMountPoint struct {
-	HostMountPoint string
-	VolumeMount    *computeapi.ContainerVolumeMount
-
-	pod       *sPodGuestInstance
-	disk      storageman.IDisk
-	guestDisk *desc.SGuestDisk
+func (s *sPodGuestInstance) GetDisks() []*desc.SGuestDisk {
+	return s.GetDesc().Disks
 }
 
-type PodVolumeMountPoints map[string]*PodVolumeMountPoint
-
-func NewPodVolumeMountPoint(vol *computeapi.ContainerVolumeMount, pod *sPodGuestInstance) (*PodVolumeMountPoint, error) {
-	point := &PodVolumeMountPoint{
-		VolumeMount: vol,
-		pod:         pod,
-	}
-	volDisk := vol.Disk
-	var disk *desc.SGuestDisk = nil
-	disks := pod.GetDesc().Disks
-	if volDisk.Id == "" {
-		return nil, errors.Errorf("volume mount disk id is empty")
-	}
-	if volDisk.Id != "" {
-		for _, gd := range disks {
-			if gd.DiskId == volDisk.Id {
-				disk = gd
-				break
-			}
+func (s *sPodGuestInstance) mountPodVolumes() error {
+	for _, vol := range s.getContainerVolumeMounts() {
+		if err := volume_mount.GetDriver(vol.Type).Mount(s, vol); err != nil {
+			return errors.Wrapf(err, "mount volume %s", jsonutils.Marshal(vol))
 		}
 	}
-	if disk == nil {
-		return nil, errors.Wrapf(errors.ErrNotFound, "not found disk by id %s", volDisk.Id)
-	}
-	iDisk, err := storageman.GetManager().GetDiskById(disk.DiskId)
-	if err != nil {
-		return nil, errors.Wrapf(err, "GetDiskById %s", disk.Path)
-	}
-	log.Infof("====get disk: %s, path: %s", jsonutils.Marshal(disk), iDisk.GetPath())
-	mntPoint := pod.getDiskMountPoint(iDisk)
-	point.HostMountPoint = mntPoint
-	point.disk = iDisk
-	point.guestDisk = disk
-	return point, nil
+	return nil
 }
 
-func (p *PodVolumeMountPoint) MountVolume() error {
-	drv, err := p.disk.GetContainerStorageDriver()
-	if err != nil {
-		return errors.Wrap(err, "GetContainerStorageDriver")
-	}
-
-	devPath, isConnected, err := drv.CheckConnect(p.disk.GetPath())
-	if err != nil {
-		return errors.Wrapf(err, "CheckConnect %s", p.disk.GetPath())
-	}
-	log.Infof("=======check connect: %q %q %v", p.disk.GetPath(), devPath, isConnected)
-	if !isConnected {
-		devPath, err = drv.ConnectDisk(p.disk.GetPath())
-		if err != nil {
-			return errors.Wrapf(err, "ConnectDisk %s", p.disk.GetPath())
+func (s *sPodGuestInstance) umountPodVolumes() error {
+	for _, vol := range s.getContainerVolumeMounts() {
+		if err := volume_mount.GetDriver(vol.Type).Unmount(s, vol); err != nil {
+			return errors.Wrapf(err, "Unmount volume %s", jsonutils.Marshal(vol))
 		}
 	}
-	return container_storage.Mount(devPath, p.HostMountPoint, p.guestDisk.Fs)
+	return nil
 }
 
-func (p *PodVolumeMountPoint) UnmountVolume() error {
-	drv, err := p.disk.GetContainerStorageDriver()
-	if err != nil {
-		return errors.Wrap(err, "GetContainerStorageDriver")
-	}
-	_, isConnected, err := drv.CheckConnect(p.disk.GetPath())
-	if err != nil {
-		return errors.Wrapf(err, "CheckConnect %s", p.disk.GetPath())
-	}
-	if isConnected {
-		if err := drv.DisconnectDisk(p.disk.GetPath(), p.HostMountPoint); err != nil {
-			return errors.Wrapf(err, "DisconnectDisk %s %s", p.disk.GetPath(), p.HostMountPoint)
-		}
-	}
-	return container_storage.Unmount(p.HostMountPoint)
-}
-
-func (s *sPodGuestInstance) getVolumeMountPoints() (PodVolumeMountPoints, error) {
-	return s.mountOrGetPodVolumes(false)
-}
-
-func (s *sPodGuestInstance) mountPodVolumes() (PodVolumeMountPoints, error) {
-	return s.mountOrGetPodVolumes(true)
-}
-
-func (s *sPodGuestInstance) getContainerVolumeMounts() []*computeapi.ContainerVolumeMount {
-	mnts := make([]*computeapi.ContainerVolumeMount, 0)
+func (s *sPodGuestInstance) getContainerVolumeMounts() []*apis.ContainerVolumeMount {
+	mnts := make([]*apis.ContainerVolumeMount, 0)
 	for _, ctr := range s.GetDesc().Containers {
 		for _, vol := range ctr.Spec.VolumeMounts {
 			tmp := vol
@@ -293,45 +225,12 @@ func (s *sPodGuestInstance) getContainerVolumeMounts() []*computeapi.ContainerVo
 	return mnts
 }
 
-func (s *sPodGuestInstance) mountOrGetPodVolumes(doMount bool) (PodVolumeMountPoints, error) {
-	mps := make(map[string]*PodVolumeMountPoint)
-	for _, vm := range s.getContainerVolumeMounts() {
-		mp, err := s.mountPodVolume(vm, doMount)
-		if err != nil {
-			return nil, errors.Wrapf(err, "mountPodVolume %s", jsonutils.Marshal(vm))
-		}
-		mps[mp.disk.GetId()] = mp
-	}
-	return mps, nil
-}
-
-func (s *sPodGuestInstance) mountPodVolume(vm *computeapi.ContainerVolumeMount, doMount bool) (*PodVolumeMountPoint, error) {
-	// TODO: support other type
-	if vm.Disk == nil {
-		return nil, errors.Errorf("Disk is nil")
-	}
-	return s.mountPodVolumeDisk(vm, s.GetDesc().Disks, doMount)
-}
-
-func (s *sPodGuestInstance) getVolumesDir() string {
+func (s *sPodGuestInstance) GetVolumesDir() string {
 	return filepath.Join(s.HomeDir(), "volumes")
 }
 
-func (s *sPodGuestInstance) getDiskMountPoint(disk storageman.IDisk) string {
-	return filepath.Join(s.getVolumesDir(), disk.GetId())
-}
-
-func (s *sPodGuestInstance) mountPodVolumeDisk(vol *computeapi.ContainerVolumeMount, disks []*desc.SGuestDisk, doMount bool) (*PodVolumeMountPoint, error) {
-	point, err := NewPodVolumeMountPoint(vol, s)
-	if err != nil {
-		return nil, errors.Wrap(err, "NewPodVolumeMountPoint")
-	}
-	if doMount {
-		if err := point.MountVolume(); err != nil {
-			return nil, errors.Wrap(err, "MountVolume")
-		}
-	}
-	return point, nil
+func (s *sPodGuestInstance) GetDiskMountPoint(disk storageman.IDisk) string {
+	return filepath.Join(s.GetVolumesDir(), disk.GetId())
 }
 
 func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.TokenCredential) (*computeapi.PodStartResponse, error) {
@@ -339,8 +238,7 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 	if err != nil {
 		return nil, errors.Wrap(err, "getPodCreateParams")
 	}
-	_, err = s.mountPodVolumes()
-	if err != nil {
+	if err := s.mountPodVolumes(); err != nil {
 		return nil, errors.Wrap(err, "mountPodVolumes")
 	}
 	podCfg := &runtimeapi.PodSandboxConfig{
@@ -409,19 +307,6 @@ func (s *sPodGuestInstance) startPod(ctx context.Context, userCred mcclient.Toke
 		CRIId:     criId,
 		IsRunning: false,
 	}, nil
-}
-
-func (s *sPodGuestInstance) umountPodVolumes() error {
-	vols, err := s.getVolumeMountPoints()
-	if err != nil {
-		return errors.Wrap(err, "getVolumeMountPoints")
-	}
-	for _, vol := range vols {
-		if err := vol.UnmountVolume(); err != nil {
-			return errors.Wrapf(err, "UnmountVolume %s", jsonutils.Marshal(vol.VolumeMount))
-		}
-	}
-	return nil
 }
 
 func (s *sPodGuestInstance) stopPod(ctx context.Context, timeout int64) error {
@@ -660,34 +545,25 @@ func (s *sPodGuestInstance) getLxcfsMounts() []*runtimeapi.Mount {
 }
 
 func (s *sPodGuestInstance) getContainerMounts(input *hostapi.ContainerCreateInput) ([]*runtimeapi.Mount, error) {
-	inputMounts := input.Spec.Mounts
+	inputMounts := input.Spec.VolumeMounts
 	if len(inputMounts) == 0 {
 		return make([]*runtimeapi.Mount, 0), nil
 	}
 	mounts := make([]*runtimeapi.Mount, len(inputMounts))
 
-	volumes, err := s.getVolumeMountPoints()
-	if err != nil {
-		return nil, errors.Wrap(err, "getVolumeMountPoints")
-	}
 	for idx, im := range inputMounts {
-		if im.Disk != nil {
-			vol, ok := volumes[im.Disk.Id]
-			if !ok {
-				return nil, errors.Wrapf(errors.ErrNotFound, "not found disk %s volume", im.Disk.Id)
-			}
-			mounts[idx] = &runtimeapi.Mount{
-				ContainerPath: im.ContainerPath,
-				HostPath:      vol.HostMountPoint,
-				Readonly:      im.Readonly,
-			}
-		} else {
-			mounts[idx] = &runtimeapi.Mount{
-				ContainerPath: im.ContainerPath,
-				HostPath:      im.HostPath,
-				Readonly:      im.Readonly,
-			}
+		mnt := &runtimeapi.Mount{
+			ContainerPath:  im.MountPath,
+			Readonly:       im.ReadOnly,
+			SelinuxRelabel: im.SelinuxRelabel,
+			Propagation:    volume_mount.GetRuntimeVolumeMountPropagation(im.Propagation),
 		}
+		hostPath, err := volume_mount.GetDriver(im.Type).GetRuntimeMountHostPath(s, im)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get runtime host mount path of %s", jsonutils.Marshal(im))
+		}
+		mnt.HostPath = hostPath
+		mounts[idx] = mnt
 	}
 	return mounts, nil
 }
@@ -783,23 +659,11 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	}
 	if len(spec.Devices) != 0 {
 		for _, dev := range spec.Devices {
-			if dev.Type == computeapi.CONTAINER_DEV_HOST {
-				ctrCfg.Devices = append(ctrCfg.Devices, &runtimeapi.Device{
-					ContainerPath: dev.ContainerPath,
-					HostPath:      dev.Path,
-					Permissions:   dev.Permissions,
-				})
-			} else {
-				man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.Type))
-				if err != nil {
-					return "", errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
-				}
-				ctrDevs, err := man.NewContainerDevices(dev)
-				if err != nil {
-					return "", errors.Wrapf(err, "NewContainerDevices with %#v", dev)
-				}
-				ctrCfg.Devices = append(ctrCfg.Devices, ctrDevs...)
+			ctrDevs, err := device.GetDriver(dev.Type).GetRuntimeDevices(dev)
+			if err != nil {
+				return "", errors.Wrapf(err, "GetRuntimeDevices of %s", jsonutils.Marshal(dev))
 			}
+			ctrCfg.Devices = append(ctrCfg.Devices, ctrDevs...)
 		}
 	}
 	if len(spec.Command) != 0 {

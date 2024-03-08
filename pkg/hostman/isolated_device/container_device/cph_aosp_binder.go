@@ -90,7 +90,8 @@ func (m *cphAOSPBinderManager) initialize(dev *isolated_device.ContainerDevice) 
 	return nil
 }
 
-func (m *cphAOSPBinderManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (m *cphAOSPBinderManager) NewContainerDevices(input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+	dev := input.IsolatedDevice
 	if !fileutils2.Exists(dev.Path) {
 		if err := m.createBinderDevice(dev); err != nil {
 			return nil, errors.Wrap(err, "createBinderDevice")
@@ -98,19 +99,20 @@ func (m *cphAOSPBinderManager) NewContainerDevices(dev *hostapi.ContainerDevice)
 	} else {
 		log.Infof("CPH ASOP binder device %s already exists", dev.Path)
 	}
+	binderFs := "/dev/binderfs"
 	ctrDevs := []*runtimeapi.Device{
 		{
-			ContainerPath: "/dev/binder",
+			ContainerPath: filepath.Join(binderFs, "binder"),
 			HostPath:      dev.Path,
 			Permissions:   "rwm",
 		},
 		{
-			ContainerPath: "/dev/hwbinder",
+			ContainerPath: filepath.Join(binderFs, "hwbinder"),
 			HostPath:      dev.Path,
 			Permissions:   "rwm",
 		},
 		{
-			ContainerPath: "/dev/vndbinder",
+			ContainerPath: filepath.Join(binderFs, "vndbinder"),
 			HostPath:      dev.Path,
 			Permissions:   "rwm",
 		},
@@ -118,7 +120,7 @@ func (m *cphAOSPBinderManager) NewContainerDevices(dev *hostapi.ContainerDevice)
 	return ctrDevs, nil
 }
 
-func (m *cphAOSPBinderManager) createBinderDevice(dev *hostapi.ContainerDevice) error {
+func (m *cphAOSPBinderManager) createBinderDevice(dev *hostapi.ContainerIsolatedDevice) error {
 	binderBin := "/opt/yunion/bin/binder_device"
 	baseName := filepath.Base(dev.Path)
 	if err := procutils.NewRemoteCommandAsFarAsPossible(binderBin, CPH_AOSP_BINDER_CONTROL_DEV_PATH, baseName).Run(); err != nil {

@@ -60,7 +60,7 @@ func (m *cphAMDGPUManager) NewDevices(dev *isolated_device.ContainerDevice) ([]i
 }
 
 func (m *cphAMDGPUManager) getDeviceHostPathByAddr(dev *hostapi.ContainerDevice) (string, error) {
-	return dev.Path, nil
+	return dev.Host.HostPath, nil
 }
 
 func (m *cphAMDGPUManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {

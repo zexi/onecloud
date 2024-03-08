@@ -137,7 +137,8 @@ func (m *netintDeviceManager) newDeviceByIndex(dev *NetintDeviceInfo, idx int) (
 	return nvmeDev, nil
 }
 
-func (m *netintDeviceManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (m *netintDeviceManager) NewContainerDevices(input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+	dev := input.IsolatedDevice
 	if !fileutils2.Exists(dev.Path) {
 		return nil, errors.Wrapf(httperrors.ErrNotFound, "device path %s doesn't exist", dev.Path)
 	}

@@ -18,50 +18,60 @@ import (
 	"reflect"
 	"testing"
 
-	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
+	"yunion.io/x/onecloud/pkg/apis"
 )
 
 func Test_parseContainerVolumeMount(t *testing.T) {
 	index0 := 0
 	tests := []struct {
 		args    string
-		want    *computeapi.ContainerVolumeMount
+		want    *apis.ContainerVolumeMount
 		wantErr bool
 	}{
 		{
 			args: "readonly=true,mount_path=/data,disk_index=0",
-			want: &computeapi.ContainerVolumeMount{
+			want: &apis.ContainerVolumeMount{
 				ReadOnly:  true,
 				MountPath: "/data",
-				Disk:      &computeapi.ContainerVolumeMountDisk{Index: &index0},
+				Disk:      &apis.ContainerVolumeMountDisk{Index: &index0},
+				Type:      apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
 			},
 		},
 		{
-			args: "readonly=True,mount_path=/test",
-			want: &computeapi.ContainerVolumeMount{
+			args:    "disk_id=abc,mount_path=/data",
+			wantErr: false,
+			want: &apis.ContainerVolumeMount{
+				Type: apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+				Disk: &apis.ContainerVolumeMountDisk{
+					Id: "abc",
+				},
+				MountPath: "/data",
+			},
+		},
+		{
+			args: "host_path=/hostpath/abc,mount_path=/data",
+			want: &apis.ContainerVolumeMount{
+				Type:      apis.CONTAINER_VOLUME_MOUNT_TYPE_HOST_PATH,
+				HostPath:  &apis.ContainerVolumeMountHostPath{Path: "/hostpath/abc"},
+				MountPath: "/data",
+			},
+		},
+		{
+			args: "read_only=True,mount_path=/test",
+			want: &apis.ContainerVolumeMount{
 				ReadOnly:  true,
 				MountPath: "/test",
 			},
 		},
 		{
-			args:    "vm1,readonly=True,mount_path=/test",
+			args:    "vm1,read_only=True,mount_path=/test",
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			args:    "readonly=True,mount_path=/test,disk_index=one",
+			args:    "read_only=True,mount_path=/test,disk_index=one",
 			want:    nil,
 			wantErr: true,
-		},
-		{
-			args:    "disk_id=abc,mount_path=/data",
-			wantErr: false,
-			want: &computeapi.ContainerVolumeMount{
-				Disk: &computeapi.ContainerVolumeMountDisk{
-					Id: "abc",
-				},
-				MountPath: "/data",
-			},
 		},
 	}
 	for _, tt := range tests {

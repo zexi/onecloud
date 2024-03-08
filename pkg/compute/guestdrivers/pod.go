@@ -26,6 +26,7 @@ import (
 	"yunion.io/x/pkg/util/rbacscope"
 	"yunion.io/x/pkg/util/sets"
 
+	"yunion.io/x/onecloud/pkg/apis"
 	api "yunion.io/x/onecloud/pkg/apis/compute"
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/quotas"
@@ -119,33 +120,19 @@ func (p *SPodDriver) validateContainerVolumeMounts(ctx context.Context, userCred
 	return nil
 }
 
-func (p *SPodDriver) validateContainerVolumeMount(ctx context.Context, userCred mcclient.TokenCredential, vm *api.ContainerVolumeMount, input *api.ServerCreateInput) error {
+func (p *SPodDriver) validateContainerVolumeMount(ctx context.Context, userCred mcclient.TokenCredential, vm *apis.ContainerVolumeMount, input *api.ServerCreateInput) error {
+	if vm.Type == "" {
+		return httperrors.NewNotEmptyError("type is required")
+	}
 	if vm.MountPath == "" {
 		return httperrors.NewNotEmptyError("mount_path is required")
 	}
-	// TODO: move below code to seperated function
-	isAttrSet := false
-	if vm.Disk != nil {
-		isAttrSet = true
-		disk := vm.Disk
-		if disk.Id != "" {
-			return httperrors.NewInputParameterError("can't specify disk_id %s when creating pod", disk.Id)
-		}
-		if disk.Index == nil {
-			return httperrors.NewNotEmptyError("disk.index is required")
-		}
-		diskIndex := *disk.Index
-		disks := input.Disks
-		if diskIndex < 0 {
-			return httperrors.NewInputParameterError("disk.index %d is less than 0", diskIndex)
-		}
-		if diskIndex >= len(disks) {
-			return httperrors.NewInputParameterError("disk.index %d is large than disk size %d", diskIndex, len(disks))
-		}
-		return nil
+	drv, err := models.GetContainerVolumeMountDriverWithError(vm.Type)
+	if err != nil {
+		return errors.Wrapf(err, "get container volume mount driver %s", vm.Type)
 	}
-	if !isAttrSet {
-		return httperrors.NewNotEmptyError("One of volume mount type must be set")
+	if err := drv.ValidatePodCreateData(ctx, userCred, vm, input); err != nil {
+		return errors.Wrapf(err, "validate %s create data", vm.Type)
 	}
 	return nil
 }

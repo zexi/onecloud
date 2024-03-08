@@ -14,6 +14,8 @@
 
 package apis
 
+import "yunion.io/x/pkg/util/sets"
+
 type ContainerKeyValue struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
@@ -34,6 +36,8 @@ type ContainerSpec struct {
 	Envs []*ContainerKeyValue `json:"envs"`
 	// Enable lxcfs
 	EnableLxcfs bool `json:"enable_lxcfs"`
+	// Volume mounts
+	VolumeMounts []*ContainerVolumeMount `json:"volume_mounts"`
 }
 
 type ImagePullPolicy string
@@ -42,3 +46,58 @@ const (
 	ImagePullPolicyAlways       = "Always"
 	ImagePullPolicyIfNotPresent = "IfNotPresent"
 )
+
+type ContainerVolumeMountType string
+
+const (
+	CONTAINER_VOLUME_MOUNT_TYPE_DISK      ContainerVolumeMountType = "disk"
+	CONTAINER_VOLUME_MOUNT_TYPE_HOST_PATH ContainerVolumeMountType = "host_path"
+)
+
+type ContainerDeviceType string
+
+const (
+	CONTAINER_DEVICE_TYPE_ISOLATED_DEVICE ContainerDeviceType = "isolated_device"
+	CONTAINER_DEVICE_TYPE_HOST            ContainerDeviceType = "host"
+)
+
+type ContainerMountPropagation string
+
+const (
+	// No mount propagation ("private" in Linux terminology).
+	MOUNTPROPAGATION_PROPAGATION_PRIVATE ContainerMountPropagation = "private"
+	// Mounts get propagated from the host to the container ("rslave" in Linux).
+	MOUNTPROPAGATION_PROPAGATION_HOST_TO_CONTAINER ContainerMountPropagation = "rslave"
+	// Mounts get propagated from the host to the container and from the
+	// container to the host ("rshared" in Linux).
+	MOUNTPROPAGATION_PROPAGATION_BIDIRECTIONAL ContainerMountPropagation = "rshared"
+)
+
+var (
+	ContainerMountPropagations = sets.NewString(
+		string(MOUNTPROPAGATION_PROPAGATION_PRIVATE), string(MOUNTPROPAGATION_PROPAGATION_HOST_TO_CONTAINER), string(MOUNTPROPAGATION_PROPAGATION_BIDIRECTIONAL))
+)
+
+type ContainerVolumeMount struct {
+	Type     ContainerVolumeMountType      `json:"type"`
+	Disk     *ContainerVolumeMountDisk     `json:"disk"`
+	HostPath *ContainerVolumeMountHostPath `json:"host_path"`
+	// Mounted read-only if true, read-write otherwise (false or unspecified).
+	ReadOnly bool `json:"read_only"`
+	// Path within the container at which the volume should be mounted.  Must
+	// not contain ':'.
+	MountPath string `json:"mount_path"`
+	// If set, the mount needs SELinux relabeling.
+	SelinuxRelabel bool `json:"selinux_relabel,omitempty"`
+	// Requested propagation mode.
+	Propagation ContainerMountPropagation `json:"propagation,omitempty"`
+}
+
+type ContainerVolumeMountDisk struct {
+	Index *int   `json:"index,omitempty"`
+	Id    string `json:"id"`
+}
+
+type ContainerVolumeMountHostPath struct {
+	Path string `json:"path"`
+}
