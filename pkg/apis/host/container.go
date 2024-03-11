@@ -31,9 +31,10 @@ type ContainerDevice struct {
 }
 
 type ContainerIsolatedDevice struct {
-	Id   string `json:"device_id"`
-	Addr string `json:"addr"`
-	Path string `json:"path"`
+	Id         string `json:"id"`
+	Addr       string `json:"addr"`
+	Path       string `json:"path"`
+	DeviceType string `json:"device_type"`
 }
 
 type ContainerHostDevice struct {

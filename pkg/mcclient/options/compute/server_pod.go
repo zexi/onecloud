@@ -94,6 +94,7 @@ func parseContainerDevice(dev string) (*computeapi.ContainerDevice, error) {
 		return nil, errors.Errorf("wrong format: %s", dev)
 	}
 	return &computeapi.ContainerDevice{
+		Type: apis.CONTAINER_DEVICE_TYPE_HOST,
 		Host: &computeapi.ContainerHostDevice{
 			ContainerPath: segs[1],
 			HostPath:      segs[0],
@@ -185,10 +186,12 @@ func (o *PodCreateOptions) Params() (*computeapi.ServerCreateInput, error) {
 		return nil, fmt.Errorf("Invalid memory input: %q", o.MEM)
 	}
 	for idx := range o.IsolatedDevice {
+		tmpIdx := idx
 		params.Pod.Containers[0].Devices = append(
 			params.Pod.Containers[0].Devices,
 			&computeapi.ContainerDevice{
-				IsolatedDevice: &computeapi.ContainerIsolatedDevice{Index: &idx},
+				Type:           apis.CONTAINER_DEVICE_TYPE_ISOLATED_DEVICE,
+				IsolatedDevice: &computeapi.ContainerIsolatedDevice{Index: &tmpIdx},
 			})
 	}
 	params.OsArch = o.Arch

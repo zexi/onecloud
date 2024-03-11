@@ -114,9 +114,10 @@ func (i isolatedDevice) ToHostDevice(dev *api.ContainerDevice) (*hostapi.Contain
 	return &hostapi.ContainerDevice{
 		Type: dev.Type,
 		IsolatedDevice: &hostapi.ContainerIsolatedDevice{
-			Id:   isoDev.GetId(),
-			Addr: isoDev.Addr,
-			Path: isoDev.DevicePath,
+			Id:         isoDev.GetId(),
+			Addr:       isoDev.Addr,
+			Path:       isoDev.DevicePath,
+			DeviceType: isoDev.DevType,
 		},
 	}, nil
 }

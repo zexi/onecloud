@@ -509,6 +509,7 @@ func (s *sPodGuestInstance) getContainerLogPath(ctrId string) string {
 }
 
 func (s *sPodGuestInstance) getLxcfsMounts() []*runtimeapi.Mount {
+	// TODO: make lxcfs configurable or be able to auto detect
 	lxcfsPath := "/var/lib/lxc/lxcfs"
 	return []*runtimeapi.Mount{
 		{

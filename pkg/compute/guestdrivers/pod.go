@@ -102,7 +102,7 @@ func (p *SPodDriver) validateContainerData(ctx context.Context, userCred mcclien
 	if ctr.Name == "" {
 		ctr.Name = fmt.Sprintf("%s-%d", defaultNamePrefix, idx)
 	}
-	if err := models.GetContainerManager().ValidateSpec(ctx, userCred, &ctr.ContainerSpec, nil, false); err != nil {
+	if err := models.GetContainerManager().ValidateSpec(ctx, userCred, &ctr.ContainerSpec, nil); err != nil {
 		return errors.Wrap(err, "validate container spec")
 	}
 	if err := p.validateContainerVolumeMounts(ctx, userCred, ctr, input); err != nil {

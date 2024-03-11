@@ -24,7 +24,7 @@ func (i isolatedDevice) GetType() apis.ContainerDeviceType {
 }
 
 func (i isolatedDevice) GetRuntimeDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
-	man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.Type))
+	man, err := isolated_device.GetContainerDeviceManager(isolated_device.ContainerDeviceType(dev.IsolatedDevice.DeviceType))
 	if err != nil {
 		return nil, errors.Wrapf(err, "GetContainerDeviceManager by type %q", dev.Type)
 	}

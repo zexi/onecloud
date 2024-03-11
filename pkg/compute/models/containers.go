@@ -121,20 +121,13 @@ func (m *SContainerManager) ValidateCreateData(ctx context.Context, userCred mcc
 	}
 	pod := obj.(*SGuest)
 	input.GuestId = pod.GetId()
-	if err := m.ValidateSpec(ctx, userCred, &input.Spec, pod, true); err != nil {
+	if err := m.ValidateSpec(ctx, userCred, &input.Spec, pod); err != nil {
 		return nil, errors.Wrap(err, "validate spec")
 	}
 	return input, nil
 }
 
-func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest, validateVolumeMount bool) error {
-	for idx, dev := range spec.Devices {
-		newDev, err := m.ValidateSpecDevice(ctx, userCred, pod, dev)
-		if err != nil {
-			return errors.Wrapf(err, "validate device %s", jsonutils.Marshal(dev))
-		}
-		spec.Devices[idx] = newDev
-	}
+func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.TokenCredential, spec *api.ContainerSpec, pod *SGuest) error {
 	if spec.ImagePullPolicy == "" {
 		spec.ImagePullPolicy = apis.ImagePullPolicyIfNotPresent
 	}
@@ -142,9 +135,16 @@ func (m *SContainerManager) ValidateSpec(ctx context.Context, userCred mcclient.
 		return httperrors.NewInputParameterError("invalid image_pull_policy %s", spec.ImagePullPolicy)
 	}
 
-	if validateVolumeMount {
+	if pod != nil {
 		if err := m.ValidateSpecVolumeMounts(ctx, userCred, pod, spec); err != nil {
 			return errors.Wrap(err, "ValidateSpecVolumeMounts")
+		}
+		for idx, dev := range spec.Devices {
+			newDev, err := m.ValidateSpecDevice(ctx, userCred, pod, dev)
+			if err != nil {
+				return errors.Wrapf(err, "validate device %s", jsonutils.Marshal(dev))
+			}
+			spec.Devices[idx] = newDev
 		}
 	}
 
