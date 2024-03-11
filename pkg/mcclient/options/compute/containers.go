@@ -131,6 +131,18 @@ func parseContainerVolumeMount(vmStr string) (*apis.ContainerVolumeMount, error)
 				vm.Disk = &apis.ContainerVolumeMountDisk{}
 			}
 			vm.Disk.Id = val
+		case "disk_subdir", "disk_sub_dir", "disk_sub_directory":
+			vm.Type = apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK
+			if vm.Disk == nil {
+				vm.Disk = &apis.ContainerVolumeMountDisk{}
+			}
+			vm.Disk.SubDirectory = val
+		case "disk_storage_size_file", "disk_ssf":
+			vm.Type = apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK
+			if vm.Disk == nil {
+				vm.Disk = &apis.ContainerVolumeMountDisk{}
+			}
+			vm.Disk.StorageSizeFile = val
 		}
 	}
 	return vm, nil

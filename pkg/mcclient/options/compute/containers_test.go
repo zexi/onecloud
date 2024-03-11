@@ -38,6 +38,27 @@ func Test_parseContainerVolumeMount(t *testing.T) {
 			},
 		},
 		{
+			args: "readonly=true,mount_path=/data,disk_index=0,disk_subdir=data",
+			want: &apis.ContainerVolumeMount{
+				ReadOnly:  true,
+				MountPath: "/data",
+				Disk:      &apis.ContainerVolumeMountDisk{Index: &index0, SubDirectory: "data"},
+				Type:      apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+			},
+		},
+		{
+			args: "readonly=true,mount_path=/storage_size,disk_index=0,disk_ssf=storage_size",
+			want: &apis.ContainerVolumeMount{
+				ReadOnly:  true,
+				MountPath: "/storage_size",
+				Disk: &apis.ContainerVolumeMountDisk{
+					Index:           &index0,
+					StorageSizeFile: "storage_size",
+				},
+				Type: apis.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+			},
+		},
+		{
 			args:    "disk_id=abc,mount_path=/data",
 			wantErr: false,
 			want: &apis.ContainerVolumeMount{

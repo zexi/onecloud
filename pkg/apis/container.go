@@ -94,8 +94,10 @@ type ContainerVolumeMount struct {
 }
 
 type ContainerVolumeMountDisk struct {
-	Index *int   `json:"index,omitempty"`
-	Id    string `json:"id"`
+	Index           *int   `json:"index,omitempty"`
+	Id              string `json:"id"`
+	SubDirectory    string `json:"sub_directory"`
+	StorageSizeFile string `json:"storage_size_file"`
 }
 
 type ContainerVolumeMountHostPath struct {

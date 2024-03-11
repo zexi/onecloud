@@ -1,6 +1,7 @@
 package volume_mount
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"yunion.io/x/log"
@@ -12,6 +13,7 @@ import (
 	"yunion.io/x/onecloud/pkg/hostman/guestman/desc"
 	"yunion.io/x/onecloud/pkg/hostman/storageman"
 	"yunion.io/x/onecloud/pkg/httperrors"
+	"yunion.io/x/onecloud/pkg/util/procutils"
 )
 
 func init() {
@@ -33,7 +35,14 @@ func (d disk) GetRuntimeMountHostPath(pod IPodInfo, vm *apis.ContainerVolumeMoun
 	if diskInput == nil {
 		return "", httperrors.NewNotEmptyError("disk is nil")
 	}
-	return filepath.Join(pod.GetVolumesDir(), diskInput.Id), nil
+	hostPath := filepath.Join(pod.GetVolumesDir(), diskInput.Id)
+	if diskInput.SubDirectory != "" {
+		return filepath.Join(hostPath, diskInput.SubDirectory), nil
+	}
+	if diskInput.StorageSizeFile != "" {
+		return filepath.Join(hostPath, diskInput.StorageSizeFile), nil
+	}
+	return hostPath, nil
 }
 
 func (d disk) getPodDisk(pod IPodInfo, vm *apis.ContainerVolumeMount) (storageman.IDisk, *desc.SGuestDisk, error) {
@@ -93,7 +102,38 @@ func (d disk) Mount(pod IPodInfo, vm *apis.ContainerVolumeMount) error {
 			return errors.Wrapf(err, "ConnectDisk %s", iDisk.GetPath())
 		}
 	}
-	return container_storage.Mount(devPath, pod.GetDiskMountPoint(iDisk), gd.Fs)
+	mntPoint := pod.GetDiskMountPoint(iDisk)
+	if err := container_storage.Mount(devPath, mntPoint, gd.Fs); err != nil {
+		return errors.Wrapf(err, "mount %s to %s", devPath, mntPoint)
+	}
+	vmDisk := vm.Disk
+	if vmDisk.SubDirectory != "" {
+		out, err := procutils.NewRemoteCommandAsFarAsPossible("mkdir", "-p", filepath.Join(mntPoint, vmDisk.SubDirectory)).Output()
+		if err != nil {
+			return errors.Wrapf(err, "make sub_directory %s inside %s: %s", vmDisk.SubDirectory, mntPoint, out)
+		}
+	}
+	if vmDisk.StorageSizeFile != "" {
+		if err := d.createStorageSizeFile(iDisk, mntPoint, vmDisk); err != nil {
+			return errors.Wrapf(err, "create storage file %s inside %s", vmDisk.StorageSizeFile, mntPoint)
+		}
+	}
+	return nil
+}
+
+func (d disk) createStorageSizeFile(iDisk storageman.IDisk, mntPoint string, input *apis.ContainerVolumeMountDisk) error {
+	desc := iDisk.GetDiskDesc()
+	diskSizeMB, err := desc.Int("disk_size")
+	if err != nil {
+		return errors.Wrapf(err, "get disk_size from %s", desc.String())
+	}
+	sp := filepath.Join(mntPoint, input.StorageSizeFile)
+	sizeBytes := diskSizeMB * 1024
+	out, err := procutils.NewRemoteCommandAsFarAsPossible("bash", "-c", fmt.Sprintf("echo %d > %s", sizeBytes, sp)).Output()
+	if err != nil {
+		return errors.Wrapf(err, "write %d to %s: %s", sizeBytes, sp, out)
+	}
+	return nil
 }
 
 func (d disk) Unmount(pod IPodInfo, vm *apis.ContainerVolumeMount) error {
@@ -105,15 +145,18 @@ func (d disk) Unmount(pod IPodInfo, vm *apis.ContainerVolumeMount) error {
 	if err != nil {
 		return errors.Wrap(err, "get disk storage driver")
 	}
+	mntPoint := pod.GetDiskMountPoint(iDisk)
+	if err := container_storage.Unmount(mntPoint); err != nil {
+		return errors.Wrapf(err, "unmount %s", mntPoint)
+	}
 	_, isConnected, err := drv.CheckConnect(iDisk.GetPath())
 	if err != nil {
 		return errors.Wrapf(err, "CheckConnect %s", iDisk.GetPath())
 	}
-	mntPoint := pod.GetDiskMountPoint(iDisk)
 	if isConnected {
 		if err := drv.DisconnectDisk(iDisk.GetPath(), mntPoint); err != nil {
 			return errors.Wrapf(err, "DisconnectDisk %s %s", iDisk.GetPath(), mntPoint)
 		}
 	}
-	return container_storage.Unmount(mntPoint)
+	return nil
 }
