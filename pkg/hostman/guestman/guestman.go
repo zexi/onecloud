@@ -482,11 +482,11 @@ func (m *SGuestManager) GetGuestNicDesc(
 	var nic *desc.SGuestNetwork
 	var guestDesc *desc.SGuestDesc
 	m.Servers.Range(func(k interface{}, v interface{}) bool {
-		guest := v.(*SKVMGuestInstance)
+		guest := v.(GuestRuntimeInstance)
 		if guest.IsLoaded() {
 			nic = guest.GetNicDescMatch(mac, ip, port, bridge)
 			if nic != nil {
-				guestDesc = guest.Desc
+				guestDesc = guest.GetDesc()
 				return false
 			}
 		}

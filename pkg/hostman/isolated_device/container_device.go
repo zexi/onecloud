@@ -65,5 +65,5 @@ type ContainerDeviceConfiguration struct {
 type IContainerDeviceManager interface {
 	GetType() ContainerDeviceType
 	NewDevices(dev *ContainerDevice) ([]IDevice, error)
-	NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error)
+	NewContainerDevices(input *hostapi.ContainerCreateInput, dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error)
 }

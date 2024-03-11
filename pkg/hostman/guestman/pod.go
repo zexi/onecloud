@@ -660,7 +660,7 @@ func (s *sPodGuestInstance) createContainer(ctx context.Context, userCred mcclie
 	}
 	if len(spec.Devices) != 0 {
 		for _, dev := range spec.Devices {
-			ctrDevs, err := device.GetDriver(dev.Type).GetRuntimeDevices(dev)
+			ctrDevs, err := device.GetDriver(dev.Type).GetRuntimeDevices(input, dev)
 			if err != nil {
 				return "", errors.Wrapf(err, "GetRuntimeDevices of %s", jsonutils.Marshal(dev))
 			}

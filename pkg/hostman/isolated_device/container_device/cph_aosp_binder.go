@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
-	"yunion.io/x/log"
 	"yunion.io/x/pkg/errors"
 
 	hostapi "yunion.io/x/onecloud/pkg/apis/host"
@@ -90,41 +89,62 @@ func (m *cphAOSPBinderManager) initialize(dev *isolated_device.ContainerDevice) 
 	return nil
 }
 
-func (m *cphAOSPBinderManager) NewContainerDevices(input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (m *cphAOSPBinderManager) NewContainerDevices(ctrInput *hostapi.ContainerCreateInput, input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
 	dev := input.IsolatedDevice
-	if !fileutils2.Exists(dev.Path) {
-		if err := m.createBinderDevice(dev); err != nil {
-			return nil, errors.Wrap(err, "createBinderDevice")
-		}
-	} else {
-		log.Infof("CPH ASOP binder device %s already exists", dev.Path)
+	if err := m.ensureBinderDevice(ctrInput.Name, dev); err != nil {
+		return nil, errors.Wrap(err, "createBinderDevice")
 	}
 	binderFs := "/dev/binderfs"
+	binderDev := func(devName string) string {
+		return m.getBinderHostDevPath(ctrInput.Name, devName)
+	}
 	ctrDevs := []*runtimeapi.Device{
 		{
 			ContainerPath: filepath.Join(binderFs, "binder"),
-			HostPath:      dev.Path,
+			HostPath:      binderDev("binder"),
 			Permissions:   "rwm",
 		},
 		{
 			ContainerPath: filepath.Join(binderFs, "hwbinder"),
-			HostPath:      dev.Path,
+			HostPath:      binderDev("hwbinder"),
 			Permissions:   "rwm",
 		},
 		{
 			ContainerPath: filepath.Join(binderFs, "vndbinder"),
-			HostPath:      dev.Path,
+			HostPath:      binderDev("vndbinder"),
 			Permissions:   "rwm",
 		},
 	}
 	return ctrDevs, nil
 }
 
-func (m *cphAOSPBinderManager) createBinderDevice(dev *hostapi.ContainerIsolatedDevice) error {
+func (m *cphAOSPBinderManager) ensureBinderDeviceOldWay(dev *hostapi.ContainerIsolatedDevice) error {
+	if fileutils2.Exists(dev.Path) {
+		return nil
+	}
 	binderBin := "/opt/yunion/bin/binder_device"
 	baseName := filepath.Base(dev.Path)
 	if err := procutils.NewRemoteCommandAsFarAsPossible(binderBin, CPH_AOSP_BINDER_CONTROL_DEV_PATH, baseName).Run(); err != nil {
 		return errors.Wrapf(err, "call command: %s %s %s", binderBin, CPH_AOSP_BINDER_CONTROL_DEV_PATH, baseName)
+	}
+	return nil
+}
+
+func (m *cphAOSPBinderManager) getBinderHostDevPath(ctrName, devName string) string {
+	binderFsPath := "/dev/binderfs"
+	return filepath.Join(binderFsPath, ctrName, devName)
+}
+
+func (m *cphAOSPBinderManager) ensureBinderDevice(ctrName string, dev *hostapi.ContainerIsolatedDevice) error {
+	binderBin := "/opt/yunion/bin/binder_devices_manager"
+	binderDev := func(devName string) string {
+		return m.getBinderHostDevPath(ctrName, devName)
+	}
+	if fileutils2.Exists(binderDev("binder")) && fileutils2.Exists(binderDev("vndbinder")) && fileutils2.Exists("hwbinder") {
+		return nil
+	}
+	if err := procutils.NewRemoteCommandAsFarAsPossible(binderBin, ctrName).Run(); err != nil {
+		return errors.Wrapf(err, "call command: %s %s", binderBin, ctrName)
 	}
 	return nil
 }

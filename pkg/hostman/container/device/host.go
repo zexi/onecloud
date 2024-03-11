@@ -22,7 +22,7 @@ func (h hostDevice) GetType() apis.ContainerDeviceType {
 	return apis.CONTAINER_DEVICE_TYPE_HOST
 }
 
-func (h hostDevice) GetRuntimeDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (h hostDevice) GetRuntimeDevices(_ *hostapi.ContainerCreateInput, dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
 	return []*runtimeapi.Device{
 		{
 			ContainerPath: dev.ContainerPath,

@@ -63,7 +63,7 @@ func (m *cphAMDGPUManager) getDeviceHostPathByAddr(dev *hostapi.ContainerDevice)
 	return dev.IsolatedDevice.Path, nil
 }
 
-func (m *cphAMDGPUManager) NewContainerDevices(dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (m *cphAMDGPUManager) NewContainerDevices(_ *hostapi.ContainerCreateInput, dev *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
 	hostPath, err := m.getDeviceHostPathByAddr(dev)
 	if err != nil {
 		return nil, errors.Wrap(err, "get device host path")

@@ -27,7 +27,7 @@ func (l localLoopDiskManager) NewDevices(dev *isolated_device.ContainerDevice) (
 	return nil, errors.Errorf("%s storage doesn't support NewDevices", l.GetType())
 }
 
-func (l localLoopDiskManager) NewContainerDevices(input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
+func (l localLoopDiskManager) NewContainerDevices(_ *hostapi.ContainerCreateInput, input *hostapi.ContainerDevice) ([]*runtimeapi.Device, error) {
 	dev := input.Disk
 	disk, err := storageman.GetManager().GetDiskById(dev.Id)
 	if err != nil {
