@@ -1322,6 +1322,15 @@ func (manager *SGuestnetworkManager) ListItemFilter(
 	return q, nil
 }
 
+func (manager *SGuestnetworkManager) CustomizeFilterList(ctx context.Context, q *sqlchemy.SQuery, userCred mcclient.TokenCredential, query jsonutils.JSONObject) (*db.CustomizeListFilters, error) {
+	input := new(api.GuestnetworkListInput)
+	if err := query.Unmarshal(input); err != nil {
+		return nil, errors.Wrap(err, "query.Unmarshal")
+	}
+	filters := db.NewCustomizeListFilters()
+
+}
+
 func (manager *SGuestnetworkManager) OrderByExtraFields(
 	ctx context.Context,
 	q *sqlchemy.SQuery,

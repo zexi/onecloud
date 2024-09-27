@@ -76,6 +76,11 @@ type GuestnetworkListInput struct {
 	Ifname []string `json:"ifname"`
 
 	TeamWith []string `json:"team_with"`
+
+	PortMappingProtocol []string `json:"port_mapping_protocol"`
+	PortMappingPort     []int    `json:"port_mapping_port"`
+	PortMappingHostPort []int    `json:"port_mapping_host_port"`
+	PortMappingHostIp   []string `json:"port_mapping_host_ip"`
 }
 
 type GuestnetworkUpdateInput struct {
