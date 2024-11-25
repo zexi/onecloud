@@ -264,6 +264,8 @@ func init() {
 			newMetricFieldCreateInput("aio_max_nr", "The running total of the number of events specified on the io_setup system call for all currently active aio contexts", "", 6),
 		})
 
+	RegistryMetricCreateInput("bond")
+
 	// vm_cpu
 	RegistryMetricCreateInput("vm_cpu", "Guest CPU usage", monitor.METRIC_RES_TYPE_GUEST,
 		monitor.METRIC_DATABASE_TELE, 1, []monitor.MetricFieldCreateInput{
