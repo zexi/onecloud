@@ -378,16 +378,24 @@ completed:
 		//sort.Sort(sort.Reverse(priorityList))
 	}
 
+	analysor := newPredicateAnalysor("select Execute")
+	defer analysor.ShowResult()
 	for _, sc := range selectedMap {
 		for _, plugin := range plugins {
+			an := fmt.Sprintf("selected plugin: %s for %s", plugin.Name(), sc.Candidate.IndexKey())
+			analysor.Start(an)
 			plugin.OnSelectEnd(unit, sc.Candidate, sc.Count)
+			analysor.End(an, time.Now())
 		}
 		selectedCandidates = append(selectedCandidates, sc)
 	}
 	// hack: not selected host should also execute OnSelectEnd step to inject result of network and storage candiates
 	for _, nsc := range noSelectedMap {
 		for _, plugin := range plugins {
+			an := fmt.Sprintf("not selected plugin: %s for %s", plugin.Name(), nsc.IndexKey())
+			analysor.Start(an)
 			plugin.OnSelectEnd(unit, nsc, 0)
+			analysor.End(an, time.Now())
 		}
 	}
 
@@ -537,13 +545,13 @@ func unitFitsOnCandidate(
 		return NewSchedLog(candidateLogIndex, stage, messages, !fit)
 	}
 
-	// analysor := newPredicateAnalysor("predicate Execute")
-	// defer analysor.ShowResult()
+	analysor := newPredicateAnalysor("predicate Execute")
+	defer analysor.ShowResult()
 	for _, predicate := range predicates {
-		// n := fmt.Sprintf("%s for %s", predicate.Name(), candidate.Getter().Name())
-		// analysor.Start(n)
+		n := fmt.Sprintf("%s for %s", predicate.Name(), candidate.Getter().Name())
+		analysor.Start(n)
 		fit, reasons, err = predicate.Execute(ctx, unit, candidate)
-		// analysor.End(n, time.Now())
+		analysor.End(n, time.Now())
 		logs = append(logs, toLog(fit, reasons, err, predicate.Name()))
 		if err != nil {
 			return false, nil, err
