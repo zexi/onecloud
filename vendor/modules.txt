@@ -310,7 +310,7 @@ github.com/cilium/ebpf/internal/unix
 # github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58
 ## explicit
 github.com/cloudflare/golz4
-# github.com/containerd/console v1.0.0
+# github.com/containerd/console v1.0.4-0.20230706203907-8f6c4e4faef5
 ## explicit; go 1.13
 github.com/containerd/console
 # github.com/containerd/containerd v1.4.1
@@ -390,7 +390,7 @@ github.com/coreos/go-semver/semver
 ## explicit; go 1.12
 github.com/coreos/go-systemd/v22/dbus
 github.com/coreos/go-systemd/v22/journal
-# github.com/creack/pty v1.1.18
+# github.com/creack/pty v1.1.21
 ## explicit; go 1.13
 github.com/creack/pty
 # github.com/cyphar/filepath-securejoin v0.2.2
@@ -445,8 +445,8 @@ github.com/docker/go-units
 ## explicit
 github.com/docker/spdystream
 github.com/docker/spdystream/spdy
-# github.com/dustin/go-humanize v1.0.0
-## explicit
+# github.com/dustin/go-humanize v1.0.1
+## explicit; go 1.16
 github.com/dustin/go-humanize
 # github.com/eapache/go-resiliency v1.1.0
 ## explicit
@@ -831,10 +831,10 @@ github.com/ma314smith/signedxml
 # github.com/mattn/go-colorable v0.1.9
 ## explicit; go 1.13
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.14
-## explicit; go 1.12
+# github.com/mattn/go-isatty v0.0.20
+## explicit; go 1.15
 github.com/mattn/go-isatty
-# github.com/mattn/go-runewidth v0.0.13
+# github.com/mattn/go-runewidth v0.0.14
 ## explicit; go 1.9
 github.com/mattn/go-runewidth
 # github.com/mattn/go-sqlite3 v1.14.19
@@ -858,8 +858,8 @@ github.com/mdlayher/packet
 # github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18
 ## explicit; go 1.12
 github.com/mdlayher/raw
-# github.com/mdlayher/socket v0.4.1
-## explicit; go 1.20
+# github.com/mdlayher/socket v0.5.0
+## explicit; go 1.21
 github.com/mdlayher/socket
 # github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
 ## explicit
@@ -1048,8 +1048,8 @@ github.com/richardlehane/mscfb
 # github.com/richardlehane/msoleps v1.0.3
 ## explicit
 github.com/richardlehane/msoleps/types
-# github.com/rivo/uniseg v0.2.0
-## explicit; go 1.12
+# github.com/rivo/uniseg v0.4.4
+## explicit; go 1.18
 github.com/rivo/uniseg
 # github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46
 ## explicit
@@ -1156,6 +1156,9 @@ github.com/tklauser/numcpus
 github.com/tredoe/osutil/user/crypt
 github.com/tredoe/osutil/user/crypt/common
 github.com/tredoe/osutil/user/crypt/sha512_crypt
+# github.com/u-root/u-root v0.14.0
+## explicit; go 1.21
+github.com/u-root/u-root/pkg/pci
 # github.com/ugorji/go/codec v1.1.7
 ## explicit
 github.com/ugorji/go/codec
@@ -1165,7 +1168,7 @@ github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
-# github.com/vishvananda/netlink v1.1.0
+# github.com/vishvananda/netlink v1.2.1-beta.2
 ## explicit; go 1.12
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl

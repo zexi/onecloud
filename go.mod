@@ -14,7 +14,7 @@ require (
 	github.com/cheggaaa/pb/v3 v3.0.8
 	github.com/coredns/coredns v1.3.0
 	github.com/coreos/go-iptables v0.6.0
-	github.com/creack/pty v1.1.18
+	github.com/creack/pty v1.1.21
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200916142827-bd33bbf0497b+incompatible
 	github.com/docker/spdystream v0.0.0-20160310174837-449fdfce4d96
 	github.com/fernet/fernet-go v0.0.0-20180830025343-9eac43b88a5e
@@ -65,7 +65,8 @@ require (
 	github.com/tatsushid/go-fastping v0.0.0-20160109021039-d7bb493dee3e
 	github.com/tjfoc/gmsm v1.4.1
 	github.com/tredoe/osutil v1.5.0
-	github.com/vishvananda/netlink v1.1.0
+	github.com/u-root/u-root v0.14.0
+	github.com/vishvananda/netlink v1.2.1-beta.2
 	github.com/vishvananda/netns v0.0.5-0.20240412164733-9469873f4601
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/xuri/excelize/v2 v2.7.1
@@ -155,7 +156,7 @@ require (
 	github.com/checkpoint-restore/go-criu/v4 v4.1.0 // indirect
 	github.com/cilium/ebpf v0.0.0-20200702112145-1c8d4c9ef775 // indirect
 	github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58 // indirect
-	github.com/containerd/console v1.0.0 // indirect
+	github.com/containerd/console v1.0.4-0.20230706203907-8f6c4e4faef5 // indirect
 	github.com/containerd/containerd v1.4.1 // indirect
 	github.com/containerd/ttrpc v1.0.2 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
@@ -168,7 +169,7 @@ require (
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/eapache/go-resiliency v1.1.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
@@ -225,12 +226,12 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/ma314smith/signedxml v0.0.0-20210628192057-abc5b481ae1c // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mattn/go-tty v0.0.0-20181127064339-e4f871175a2f // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18 // indirect
-	github.com/mdlayher/socket v0.4.1 // indirect
+	github.com/mdlayher/socket v0.5.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/mindprince/gonvml v0.0.0-20190828220739-9ebdce4bb989 // indirect
 	github.com/minio/minio-go/v6 v6.0.33 // indirect
@@ -268,7 +269,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.3 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	github.com/seccomp/libseccomp-golang v0.9.1 // indirect
 	github.com/smartystreets/assertions v1.2.0 // indirect

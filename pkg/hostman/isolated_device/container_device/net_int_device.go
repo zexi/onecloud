@@ -16,9 +16,15 @@ package container_device
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 
+	"github.com/u-root/u-root/pkg/pci"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
+	"yunion.io/x/log"
 
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/pkg/errors"
@@ -36,8 +42,11 @@ var (
 )
 
 const (
-	NETINT_VENDOR_ID = "0000"
-	NETINT_DEVICE_ID = "0000"
+	NETINT_MOCK_VENDOR_ID = "0000"
+	NETINT_MOCK_DEVICE_ID = "0000"
+
+	netint_real_vendor_id = "1d82"
+	netint_real_device_id = "0401"
 )
 
 func init() {
@@ -83,7 +92,62 @@ type NVMEListResult struct {
 	Devices []*NetintDeviceInfo `json:"devices"`
 }
 
+func (m *netintDeviceManager) fetchNVMEDevicesByPCI() ([]*NetintDeviceInfo, error) {
+	br, err := pci.NewBusReader()
+	if err != nil {
+		return nil, errors.Wrap(err, "pci.NewBusReader")
+	}
+	devs, err := br.Read(func(p *pci.PCI) bool {
+		vendorId, _ := strconv.ParseUint(netint_real_vendor_id, 16, 16)
+		deviceId, _ := strconv.ParseUint(netint_real_device_id, 16, 16)
+		if p.Vendor == uint16(vendorId) && p.Device == uint16(deviceId) {
+			return true
+		}
+		return false
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "read from pci bus")
+	}
+	result := make([]*NetintDeviceInfo, len(devs))
+	for i := range devs {
+		dev := devs[i]
+		log.Warningf("=======dev json: %s", jsonutils.Marshal(dev).PrettyString())
+		nDev, err := newNetintDeviceInfoByPCIDevice(devs[i])
+		if err != nil {
+			return nil, errors.Wrapf(err, "newNetintDeviceInfoByPCIDevice by %#v", dev)
+		}
+		result[i] = nDev
+	}
+	return result, nil
+}
+
+func newNetintDeviceInfoByPCIDevice(dev *pci.PCI) (*NetintDeviceInfo, error) {
+	info := &NetintDeviceInfo{}
+	nvmeDir := filepath.Join(dev.FullPath, "nvme")
+	subDirs, err := os.ReadDir(nvmeDir)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ReadDir %s", nvmeDir)
+	}
+	subDirNames := make([]string, len(subDirs))
+	for i := range subDirs {
+		subDirNames[i] = subDirs[i].Name()
+	}
+	if len(subDirs) != 1 {
+		return nil, errors.Errorf("expected 1 dir got %d: %#v", len(subDirs), subDirNames)
+	}
+	index, err := strconv.Atoi(strings.TrimPrefix(subDirNames[0], "nvme"))
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse nvme index: %s", subDirNames[0])
+	}
+	info.Index = index
+	info.DevicePath = fmt.Sprintf("/dev/%sn1", subDirNames[0])
+	return info, nil
+}
+
 func (m *netintDeviceManager) fetchNVMEDevices() ([]*NetintDeviceInfo, error) {
+	pciDevs, err := m.fetchNVMEDevicesByPCI()
+	log.Warningf("==========fetch nvme devices: %s, error: %v", jsonutils.Marshal(pciDevs).PrettyString(), err)
+
 	out, err := procutils.NewRemoteCommandAsFarAsPossible("bash", "-c", "nvme list -o json").Output()
 	if err != nil {
 		return nil, errors.Wrap(err, "get nvme device json output")
@@ -104,6 +168,7 @@ func (m *netintDeviceManager) fetchNVMEDevices() ([]*NetintDeviceInfo, error) {
 		tmpDev := dev
 		result = append(result, tmpDev)
 	}
+
 	return result, nil
 }
 
@@ -131,8 +196,8 @@ func (m *netintDeviceManager) NewDevices(dev *isolated_device.ContainerDevice) (
 func (m *netintDeviceManager) newDeviceByIndex(dev *NetintDeviceInfo, idx int) (*netintDevice, error) {
 	devInfo := &isolated_device.PCIDevice{
 		Addr:      fmt.Sprintf("%d-%d", dev.Index, idx),
-		VendorId:  NETINT_VENDOR_ID,
-		DeviceId:  NETINT_DEVICE_ID,
+		VendorId:  NETINT_MOCK_VENDOR_ID,
+		DeviceId:  NETINT_MOCK_DEVICE_ID,
 		ModelName: dev.ModelNumber,
 	}
 	nvmeDev := &netintDevice{

@@ -1,4 +1,5 @@
-// +build solaris,cgo
+//go:build freebsd && cgo
+// +build freebsd,cgo
 
 /*
    Copyright The containerd Authors.
@@ -19,33 +20,27 @@
 package console
 
 import (
+	"fmt"
 	"os"
-
-	"golang.org/x/sys/unix"
 )
 
-//#include <stdlib.h>
+/*
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+*/
 import "C"
 
-const (
-	cmdTcGet = unix.TCGETS
-	cmdTcSet = unix.TCSETS
-)
-
-// ptsname retrieves the name of the first available pts for the given master.
-func ptsname(f *os.File) (string, error) {
-	ptspath, err := C.ptsname(C.int(f.Fd()))
+// openpt allocates a new pseudo-terminal and establishes a connection with its
+// control device.
+func openpt() (*os.File, error) {
+	fd, err := C.posix_openpt(C.O_RDWR)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("posix_openpt: %w", err)
 	}
-	return C.GoString(ptspath), nil
-}
-
-// unlockpt unlocks the slave pseudoterminal device corresponding to the master pseudoterminal referred to by f.
-// unlockpt should be called before opening the slave side of a pty.
-func unlockpt(f *os.File) error {
-	if _, err := C.grantpt(C.int(f.Fd())); err != nil {
-		return err
+	if _, err := C.grantpt(fd); err != nil {
+		C.close(fd)
+		return nil, fmt.Errorf("grantpt: %w", err)
 	}
-	return nil
+	return os.NewFile(uintptr(fd), ""), nil
 }

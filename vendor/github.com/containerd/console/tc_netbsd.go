@@ -1,5 +1,3 @@
-// +build solaris,!cgo
-
 /*
    Copyright The containerd Authors.
 
@@ -16,32 +14,32 @@
    limitations under the License.
 */
 
-//
-// Implementing the functions below requires cgo support.  Non-cgo stubs
-// versions are defined below to enable cross-compilation of source code
-// that depends on these functions, but the resultant cross-compiled
-// binaries cannot actually be used.  If the stub function(s) below are
-// actually invoked they will display an error message and cause the
-// calling process to exit.
-//
-
 package console
 
 import (
+	"bytes"
 	"os"
 
 	"golang.org/x/sys/unix"
 )
 
 const (
-	cmdTcGet = unix.TCGETS
-	cmdTcSet = unix.TCSETS
+	cmdTcGet = unix.TIOCGETA
+	cmdTcSet = unix.TIOCSETA
 )
 
-func ptsname(f *os.File) (string, error) {
-	panic("ptsname() support requires cgo.")
+// unlockpt unlocks the slave pseudoterminal device corresponding to the master pseudoterminal referred to by f.
+// unlockpt should be called before opening the slave side of a pty.
+// This does not exist on NetBSD, it does not allocate controlling terminals on open
+func unlockpt(f *os.File) error {
+	return nil
 }
 
-func unlockpt(f *os.File) error {
-	panic("unlockpt() support requires cgo.")
+// ptsname retrieves the name of the first available pts for the given master.
+func ptsname(f *os.File) (string, error) {
+	ptm, err := unix.IoctlGetPtmget(int(f.Fd()), unix.TIOCPTSNAME)
+	if err != nil {
+		return "", err
+	}
+	return string(ptm.Sn[:bytes.IndexByte(ptm.Sn[:], 0)]), nil
 }
