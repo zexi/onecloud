@@ -16,6 +16,7 @@ package predicates
 
 import (
 	"fmt"
+	"time"
 
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/log"
@@ -167,39 +168,46 @@ func GetRequestSchedtags(reqTags []*computeapi.SchedtagConfig, allTags []schedta
 type SchedtagChecker struct {
 }
 
-type apiTags []computeapi.SchedtagConfig
+type apiTags map[string]computeapi.SchedtagConfig
+
+func newApiTags(tags []computeapi.SchedtagConfig) apiTags {
+	ret := make(map[string]computeapi.SchedtagConfig)
+	for _, tag := range tags {
+		ret[tag.Id] = tag
+	}
+	return ret
+}
 
 func (t apiTags) contains(objTag schedtag.ISchedtag) bool {
-	for _, tag := range t {
-		if tag.Id == objTag.GetId() || tag.Id == objTag.GetName() {
-			return true
-		}
+	if _, ok := t[objTag.GetId()]; ok {
+		return true
+	}
+	if _, ok := t[objTag.GetName()]; ok {
+		return true
 	}
 	return false
 }
 
-type objTags []schedtag.ISchedtag
+type objTags map[string]schedtag.ISchedtag
+
+func newObjTags(tags []schedtag.ISchedtag) objTags {
+	ret := make(map[string]schedtag.ISchedtag)
+	for _, tag := range tags {
+		ret[tag.GetId()] = tag
+		ret[tag.GetName()] = tag
+	}
+	return ret
+}
 
 func (t objTags) contains(atag computeapi.SchedtagConfig) bool {
-	for _, tag := range t {
-		if tag.GetId() == atag.Id || tag.GetName() == atag.Id {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *SchedtagChecker) contains(tags []computeapi.SchedtagConfig, objTag models.SSchedtag) bool {
-	for _, tag := range tags {
-		if tag.Id == objTag.Id || tag.Id == objTag.Name {
-			return true
-		}
+	if _, ok := t[atag.Id]; ok {
+		return true
 	}
 	return false
 }
 
 func (c *SchedtagChecker) HasIntersection(tags []computeapi.SchedtagConfig, objTags []schedtag.ISchedtag) (bool, schedtag.ISchedtag) {
-	var atags apiTags = tags
+	atags := newApiTags(tags)
 	for _, objTag := range objTags {
 		if atags.contains(objTag) {
 			return true, objTag
@@ -209,7 +217,7 @@ func (c *SchedtagChecker) HasIntersection(tags []computeapi.SchedtagConfig, objT
 }
 
 func (c *SchedtagChecker) Contains(objectTags []schedtag.ISchedtag, tags []computeapi.SchedtagConfig) (bool, *computeapi.SchedtagConfig) {
-	var otags objTags = objectTags
+	otags := newObjTags(objectTags)
 	for _, tag := range tags {
 		if !otags.contains(tag) {
 			return false, &tag
@@ -276,10 +284,12 @@ func (c *SchedtagChecker) GetCandidateSchedtags(candidate ISchedtagCandidate) ([
 }
 
 func (c *SchedtagChecker) Check(p ISchedtagPredicate, candidate ISchedtagCandidate) error {
+	getT := time.Now()
 	candidateTags, err := c.GetCandidateSchedtags(candidate)
 	if err != nil {
 		return err
 	}
+	log.Infof("=====%s getCandidateSchedtags %s =====", candidate.IndexKey(), time.Since(getT))
 
 	execludeTags := p.GetExcludeTags()
 	requireTags := p.GetRequireTags()
@@ -298,6 +308,7 @@ func (c *SchedtagChecker) Check(p ISchedtagPredicate, candidate ISchedtagCandida
 			return fmt.Errorf("%s need schedtag: %q", candiInfo, tag.Id)
 		}
 	}
+	log.Infof("-------%s check time: %s", candidate.IndexKey(), time.Since(getT))
 
 	return nil
 }
