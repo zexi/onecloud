@@ -32,7 +32,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -451,7 +450,7 @@ func (p *BaseSchedtagPredicate) Execute(
 	u *core.Unit,
 	c core.Candidater,
 ) (bool, []core.PredicateFailureReason, error) {
-	inputTime := time.Now()
+	//inputTime := time.Now()
 	inputs := sp.GetInputs(u)
 	resources := sp.GetResources(c)
 	//log.Infof("=======%s get input time: %s, inputs: %s", sp.Name(), time.Since(inputTime), jsonutils.Marshal(inputs))
@@ -495,9 +494,9 @@ func (p *BaseSchedtagPredicate) Execute(
 			h.Exclude(fmt.Sprintf("get all schedtags"))
 			break
 		}
-		checkTime := time.Now()
+		//checkTime := time.Now()
 		matchedResources, err := p.checkResources(input, fitResources, u, c, allTags)
-		log.Infof("---%s checkResources time: %s", sp.Name(), time.Since(checkTime))
+		//log.Infof("---%s checkResources time: %s", sp.Name(), time.Since(checkTime))
 		if err != nil {
 			if len(filterErrs) > 0 {
 				h.ExcludeByErrors(filterErrs)
@@ -508,7 +507,7 @@ func (p *BaseSchedtagPredicate) Execute(
 		inputRes[idx] = matchedResources
 	}
 
-	log.Infof("=======%s get execute time: %s", sp.Name(), time.Since(inputTime))
+	//log.Infof("=======%s get execute time: %s", sp.Name(), time.Since(inputTime))
 	return h.GetResult()
 }
 

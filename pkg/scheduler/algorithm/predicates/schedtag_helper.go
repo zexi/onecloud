@@ -16,7 +16,6 @@ package predicates
 
 import (
 	"fmt"
-	"time"
 
 	"yunion.io/x/jsonutils"
 	"yunion.io/x/log"
@@ -289,12 +288,12 @@ func (c *SchedtagChecker) GetCandidateSchedtags(candidate ISchedtagCandidate) ([
 }
 
 func (c *SchedtagChecker) Check(p ISchedtagPredicate, candidate ISchedtagCandidate) error {
-	getT := time.Now()
+	//getT := time.Now()
 	candidateTags, err := c.GetCandidateSchedtags(candidate)
 	if err != nil {
 		return err
 	}
-	log.Infof("=====%s getCandidateSchedtags %s =====", candidate.IndexKey(), time.Since(getT))
+	//log.Infof("=====%s getCandidateSchedtags %s =====", candidate.IndexKey(), time.Since(getT))
 
 	execludeTags := p.GetExcludeTags()
 	requireTags := p.GetRequireTags()
@@ -313,7 +312,7 @@ func (c *SchedtagChecker) Check(p ISchedtagPredicate, candidate ISchedtagCandida
 			return fmt.Errorf("%s need schedtag: %q", candiInfo, tag.Id)
 		}
 	}
-	log.Infof("-------%s check time: %s", candidate.IndexKey(), time.Since(getT))
+	//log.Infof("-------%s check time: %s", candidate.IndexKey(), time.Since(getT))
 
 	return nil
 }
