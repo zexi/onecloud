@@ -26,6 +26,7 @@ import (
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	"yunion.io/x/onecloud/pkg/compute/models"
 	"yunion.io/x/onecloud/pkg/scheduler/data_manager/schedtag"
+	"yunion.io/x/onecloud/pkg/scheduler/options"
 	"yunion.io/x/onecloud/pkg/util/conditionparser"
 )
 
@@ -276,9 +277,13 @@ func (c *SchedtagChecker) mergeSchedtags(candiate ISchedtagCandidate, staticTags
 func (c *SchedtagChecker) GetCandidateSchedtags(candidate ISchedtagCandidate) ([]schedtag.ISchedtag, error) {
 	// staticTags := candidate.GetSchedtags()
 	staticTags := schedtag.GetCandidateSchedtags(candidate.ResourceType(), candidate.GetId())
-	dynamicTags, err := c.getDynamicSchedtags(candidate.ResourceType(), candidate.GetDynamicSchedDesc())
-	if err != nil {
-		return nil, err
+	dynamicTags := []schedtag.ISchedtag{}
+	var err error
+	if options.Options.EnableDynamicSchedtag {
+		dynamicTags, err = c.getDynamicSchedtags(candidate.ResourceType(), candidate.GetDynamicSchedDesc())
+		if err != nil {
+			return nil, err
+		}
 	}
 	return c.mergeSchedtags(candidate, staticTags, dynamicTags), nil
 }
