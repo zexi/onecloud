@@ -95,6 +95,7 @@ type SchedOptions struct {
 	GuestCpusetAllocSequenceInterval int  `help:"Guest alloc cpuset sequence interval" default:"4"`
 
 	EnableDynamicSchedtag bool `help:"Enable dynamic schedtag feature" default:"false"`
+	EnableAnalysis        bool `help:"Enable analysis feature" default:"false"`
 
 	OpenstackOptions
 }
