@@ -182,6 +182,7 @@ func doSelect(u *Unit, candidate Candidater, count int64) {
 	defer analysor.ShowResult()
 	for _, plugin := range plugins {
 		an := fmt.Sprintf("selected plugin: %s for %s", plugin.Name(), candidate.IndexKey())
+		analysor.Start(an)
 		plugin.OnSelectEnd(u, candidate, count)
 		analysor.End(an, time.Now())
 	}
