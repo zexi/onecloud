@@ -54,6 +54,7 @@ type sSchedResultItem struct {
 }
 
 func (item *sSchedResultItem) minInstanceGroupCapacity(groupSet map[string]*models.SGroup) int64 {
+	log.Infof("============minInstanceGroupCapacity %s %s: %v, %v", item.ID, item.Name, item.CapacityDetails, item.instanceGroupCapacity)
 	var mincapa int64 = -1
 	for id, capa := range item.instanceGroupCapacity {
 		if _, ok := groupSet[id]; !ok {
@@ -327,6 +328,9 @@ func unMarkHostUsed(host *sSchedResultItem, guestInfo sGuestInfo, isBackup *bool
 // Otherwise, the instanceGroups with ForceDispersion 'false' will be unforced.
 func selectHost(hosts []*sSchedResultItem, guestInfo sGuestInfo, isBackup *bool, forced bool) *sSchedResultItem {
 	sortHosts(hosts, &guestInfo, isBackup)
+	for _, host := range hosts {
+		log.Infof("========sorted host: %s, cap: %v, ins: %v", host.Name, host.CapacityDetails, host.instanceGroupCapacity)
+	}
 	var idx = -1
 	if len(guestInfo.preferHost) > 0 {
 		if idx = hostsIndex(guestInfo.preferHost, hosts); idx < 0 {
