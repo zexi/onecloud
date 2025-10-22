@@ -220,6 +220,20 @@ func (manager *SSchedtagManager) ListItemFilter(
 		q = q.Join(hostSchedtagSubq, sqlchemy.Equals(q.Field("id"), hostSchedtagSubq.Field("schedtag_id")))
 	}
 
+	if len(query.ZoneId) > 0 {
+		zoneId := query.ZoneId
+		zoneObj, err := ZoneManager.FetchByIdOrName(ctx, userCred, zoneId)
+		if err != nil {
+			return nil, errors.Wrapf(err, "fetch zone by %s", zoneId)
+		}
+		zoneId = zoneObj.GetId()
+
+		hostSubq := HostManager.Query("id").Equals("zone_id", zoneId).SubQuery()
+		hostSchedtagQ := HostschedtagManager.Query("schedtag_id")
+		hostSchedtagSubq := hostSchedtagQ.Join(hostSubq, sqlchemy.Equals(hostSchedtagQ.Field("host_id"), hostSubq.Field("id"))).SubQuery()
+		q = q.Join(hostSchedtagSubq, sqlchemy.Equals(q.Field("id"), hostSchedtagSubq.Field("schedtag_id")))
+	}
+
 	return q, nil
 }
 
