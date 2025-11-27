@@ -34,9 +34,6 @@ const (
 
 	CommonAlertDefaultRecipient = "commonalert-default"
 
-	//metirc fields 之间的运算
-	CommonAlertFieldOpt_Division = "/"
-
 	DEFAULT_SEND_NOTIFY_CHANNEL = "users"
 
 	METRIC_QUERY_TYPE_NO_DATA     = "nodata_query"
@@ -45,6 +42,13 @@ const (
 	CommonAlertLevelNormal    = "normal"
 	CommonAlertLevelImportant = "important"
 	CommonAlertLevelFatal     = "fatal"
+)
+
+type CommonAlertFieldOpt string
+
+const (
+	//metirc fields 之间的运算
+	CommonAlertFieldOptDivision CommonAlertFieldOpt = "/"
 )
 
 var CommonAlertLevels = []string{CommonAlertLevelNormal, CommonAlertLevelImportant, CommonAlertLevelFatal}
@@ -96,10 +100,12 @@ type CommonAlertQuery struct {
 	*AlertQuery
 	// metric points'value的运算方式
 	Reduce string `json:"reduce"`
-	// 比较运算符, 比如: >, <, >=, <=
+	// 比较运算符, 比如: >, <, >=, <=, within_range, outside_range
 	Comparator string `json:"comparator"`
-	// 报警阀值
+	// 报警阀值 (用于 gt, lt, eq)
 	Threshold float64 `json:"threshold"`
+	// 范围参数 (用于 within_range, outside_range)
+	ThresholdRange []float64 `json:"threshold_range"`
 	//field yunsuan
 	FieldOpt      string `json:"field_opt"`
 	ConditionType string `json:"condition_type"`
@@ -161,12 +167,12 @@ type CommonAlertDetails struct {
 }
 
 type CommonAlertMetricDetails struct {
-	Operator      string    `json:"operator"`
-	Comparator    string    `json:"comparator"`
-	Threshold     float64   `json:"threshold"`
-	WithinRange   []float64 `json:"within_range"`
-	ConditionType string    `json:"condition_type"`
-	ThresholdStr  string    `json:"threshold_str"`
+	Operator       string    `json:"operator"`
+	Comparator     string    `json:"comparator"`
+	Threshold      float64   `json:"threshold"`
+	ThresholdRange []float64 `json:"threshold_range"`
+	ConditionType  string    `json:"condition_type"`
+	ThresholdStr   string    `json:"threshold_str"`
 	// metric points'value的运算方式
 	Reduce                 string           `json:"reduce"`
 	DB                     string           `json:"db"`
