@@ -135,6 +135,12 @@ func (v *vllm) GetContainerSpec(ctx context.Context, llm *models.SLLM, image *mo
 	}
 }
 
+func (v *vllm) GetContainerSpecs(ctx context.Context, llm *models.SLLM, image *models.SLLMImage, sku *models.SLLMSku, props []string, devices []computeapi.SIsolatedDevice, diskId string) []*computeapi.PodContainerCreateInput {
+	return []*computeapi.PodContainerCreateInput{
+		v.GetContainerSpec(ctx, llm, image, sku, props, devices, diskId),
+	}
+}
+
 func (v *vllm) GetLLMUrl(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM) (string, error) {
 	// Similar logic to Ollama to determine URL
 	server, err := llm.GetServer(ctx)

@@ -9,14 +9,18 @@ import (
 type LLMContainerType string
 
 const (
-	LLM_CONTAINER_OLLAMA LLMContainerType = "ollama"
-	LLM_CONTAINER_VLLM   LLMContainerType = "vllm"
+	LLM_CONTAINER_OLLAMA    LLMContainerType = "ollama"
+	LLM_CONTAINER_VLLM      LLMContainerType = "vllm"
+	LLM_CONTAINER_COMFYUI   LLMContainerType = "comfyui"
+	LLM_CONTAINER_OPENCLAW  LLMContainerType = "openclaw"
 )
 
 var (
 	LLM_CONTAINER_TYPES = sets.NewString(
 		string(LLM_CONTAINER_OLLAMA),
 		string(LLM_CONTAINER_VLLM),
+		string(LLM_CONTAINER_COMFYUI),
+		string(LLM_CONTAINER_OPENCLAW),
 	)
 )
 

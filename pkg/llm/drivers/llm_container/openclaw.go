@@ -1,0 +1,256 @@
+package llm_container
+
+import (
+	"context"
+	"fmt"
+
+	commonapi "yunion.io/x/onecloud/pkg/apis"
+	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
+	api "yunion.io/x/onecloud/pkg/apis/llm"
+	"yunion.io/x/onecloud/pkg/llm/models"
+	"yunion.io/x/onecloud/pkg/mcclient"
+)
+
+// coollabsio/openclaw docker-compose: openclaw (main) + browser (CDP sidecar for /browser/)
+// See: https://github.com/coollabsio/openclaw/blob/main/docker-compose.yml
+const (
+	openclawContainerName  = "openclaw"
+	browserContainerName   = "browser"
+	openclawBrowserImage   = "registry.cn-beijing.aliyuncs.com/cloudpods/openclaw-browser:latest"
+	openclawDataDir        = "/data"
+	browserConfigDir       = "/config"
+	openclawBrowserCDPPort = "9222"
+)
+
+func init() {
+	models.RegisterLLMContainerDriver(newOpenClaw())
+}
+
+type openclaw struct{}
+
+func newOpenClaw() models.ILLMContainerDriver {
+	return new(openclaw)
+}
+
+func (c *openclaw) GetType() api.LLMContainerType {
+	return api.LLM_CONTAINER_OPENCLAW
+}
+
+func (c *openclaw) StartLLM(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM) error {
+	// lc, err := llm.GetLLMContainer()
+	// if err != nil {
+	// 	return errors.Wrap(err, "get llm container")
+	// }
+	// // 启动 openclaw gateway
+	// cmd := fmt.Sprintf("/app/scripts/entrypoint-gui.sh")
+	// _, err = exec(ctx, lc.CmpId, cmd, 30)
+	// if err != nil {
+	// 	return errors.Wrap(err, "exec start openclaw gateway")
+	// }
+	return nil
+}
+
+func (c *openclaw) GetContainerSpec(ctx context.Context, llm *models.SLLM, image *models.SLLMImage, sku *models.SLLMSku, props []string, devices []computeapi.SIsolatedDevice, diskId string) *computeapi.PodContainerCreateInput {
+	// Multi-container: use GetContainerSpecs
+	return nil
+}
+
+// func (c *openclaw) GetContainerSpecs(ctx context.Context, llm *models.SLLM, image *models.SLLMImage, sku *models.SLLMSku, props []string, devices []computeapi.SIsolatedDevice, diskId string) []*computeapi.PodContainerCreateInput {
+// 	diskIndex := 0
+
+// 	// 1. Browser sidecar: CDP on 9222, persistent /config, shm 2g
+// 	browserVols := []*commonapi.ContainerVolumeMount{
+// 		{
+// 			Disk: &commonapi.ContainerVolumeMountDisk{
+// 				Index:        &diskIndex,
+// 				SubDirectory: browserStorageDir,
+// 			},
+// 			Type:      commonapi.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+// 			MountPath: browserConfigDir,
+// 		},
+// 	}
+// 	browserSpec := computeapi.ContainerSpec{
+// 		ContainerSpec: commonapi.ContainerSpec{
+// 			Image:         openclawBrowserImage,
+// 			EnableLxcfs:   true,
+// 			AlwaysRestart: true,
+// 			ShmSizeMB:     2048, // 2g for Chrome
+// 			Envs: []*commonapi.ContainerKeyValue{
+// 				{Key: "PUID", Value: "1000"},
+// 				{Key: "PGID", Value: "1000"},
+// 				{Key: "TZ", Value: "Etc/UTC"},
+// 				{Key: "CHROME_CLI", Value: "--remote-debugging-port=" + openclawBrowserCDPPort},
+// 			},
+// 		},
+// 		VolumeMounts: browserVols,
+// 	}
+
+// 	// 2. OpenClaw main: nginx :8080 -> gateway :18789, /data, depends on browser
+// 	openclawVols := []*commonapi.ContainerVolumeMount{
+// 		{
+// 			Disk: &commonapi.ContainerVolumeMountDisk{
+// 				Index:        &diskIndex,
+// 				SubDirectory: "data",
+// 			},
+// 			Type:      commonapi.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+// 			MountPath: openclawDataDir,
+// 		},
+// 	}
+// 	openclawSpec := computeapi.ContainerSpec{
+// 		ContainerSpec: commonapi.ContainerSpec{
+// 			Image:             image.ToContainerImage(),
+// 			ImageCredentialId: image.CredentialId,
+// 			EnableLxcfs:       true,
+// 			AlwaysRestart:     true,
+// 			DependsOn:         []string{fmt.Sprintf("%s-%s", llm.GetName(), browserContainerName)},
+// 			Envs: []*commonapi.ContainerKeyValue{
+// 				// Provider
+// 				{Key: "MOONSHOT_API_KEY", Value: "sk-9taa32DcGGQliadQTEcZfpMUL9LCAnZVfyE6hKWPUMWEofJ8"},
+// 				{Key: "OPENCLAW_PRIMARY_MODEL", Value: "moonshot/kimi-k2.5"},
+// 				// Auth
+// 				{Key: "AUTH_USERNAME", Value: "admin"},
+// 				{Key: "AUTH_PASSWORD", Value: "admin@123"},
+// 				{Key: "OPENCLAW_GATEWAY_TOKEN", Value: "90d42cfc7a925201a27b61ce9b6403693629d2a18094a596"},
+// 				// Browser sidecar
+// 				{Key: "BROWSER_CDP_URL", Value: "http://localhost" + ":" + openclawBrowserCDPPort},
+// 				{Key: "BROWSER_DEFAULT_PROFILE", Value: "openclaw"},
+// 				{Key: "BROWSER_EVALUATE_ENABLED", Value: "true"},
+// 			},
+// 		},
+// 		VolumeMounts: openclawVols,
+// 	}
+
+// 	return []*computeapi.PodContainerCreateInput{
+// 		{Name: fmt.Sprintf("%s-%s", llm.GetName(), browserContainerName), ContainerSpec: browserSpec},
+// 		{Name: fmt.Sprintf("%s-%s", llm.GetName(), openclawContainerName), ContainerSpec: openclawSpec},
+// 	}
+// }
+
+func (c *openclaw) GetContainerSpecs(ctx context.Context, llm *models.SLLM, image *models.SLLMImage, sku *models.SLLMSku, props []string, devices []computeapi.SIsolatedDevice, diskId string) []*computeapi.PodContainerCreateInput {
+	diskIndex := 0
+
+	openclawVols := []*commonapi.ContainerVolumeMount{
+		{
+			Disk: &commonapi.ContainerVolumeMountDisk{
+				Index:        &diskIndex,
+				SubDirectory: "config",
+			},
+			Type:      commonapi.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+			MountPath: browserConfigDir,
+		},
+		{
+			Disk: &commonapi.ContainerVolumeMountDisk{
+				Index:        &diskIndex,
+				SubDirectory: "data",
+			},
+			Type:      commonapi.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+			MountPath: openclawDataDir,
+		},
+	}
+	openclawSpec := computeapi.ContainerSpec{
+		ContainerSpec: commonapi.ContainerSpec{
+			// Image:             image.ToContainerImage(),
+			Image:             "registry.cn-beijing.aliyuncs.com/zexi/openclaw:ubu-20260228.3",
+			ImageCredentialId: image.CredentialId,
+			EnableLxcfs:       true,
+			AlwaysRestart:     true,
+			ShmSizeMB:         2048,
+			DisableNoNewPrivs: true,
+			Envs: []*commonapi.ContainerKeyValue{
+				// Desktop env
+				{Key: "TZ", Value: "Etc/UTC"},
+				{Key: "PUID", Value: "1000"},
+				{Key: "PGID", Value: "1000"},
+				{Key: "LC_ALL", Value: "zh_CN.UTF-8"},
+				// Provider
+				{Key: "MOONSHOT_API_KEY", Value: "sk-1234567890"},
+				{Key: "OPENCLAW_PRIMARY_MODEL", Value: "moonshot/kimi-k2.5"},
+				// Auth
+				{Key: "AUTH_USERNAME", Value: "admin"},
+				{Key: "AUTH_PASSWORD", Value: "admin@123"},
+				// // Browser sidecar
+				// {Key: "BROWSER_CDP_URL", Value: "http://localhost" + ":" + openclawBrowserCDPPort},
+				// {Key: "BROWSER_DEFAULT_PROFILE", Value: "openclaw"},
+				// {Key: "BROWSER_EVALUATE_ENABLED", Value: "true"},
+				// OpenClaw env
+				{Key: "OPENCLAW_GATEWAY_TOKEN", Value: "abcd"},
+				{Key: "OPENCLAW_GATEWAY_PORT", Value: "18789"},
+				{Key: "OPENCLAW_GATEWAY_BIND", Value: "loopback"},
+				{Key: "OPENCLAW_STATE_DIR", Value: "/data/.openclaw"},
+				{Key: "OPENCLAW_WORKSPACE_DIR", Value: "/data/.openclaw/workspace"},
+				// Brew env
+				{Key: "HOMEBREW_PREFIX", Value: "/home/linuxbrew/.linuxbrew"},
+				{Key: "HOMEBREW_CELLAR", Value: "/home/linuxbrew/.linuxbrew/Cellar"},
+				{Key: "HOMEBREW_REPOSITORY", Value: "/home/linuxbrew/.linuxbrew/Homebrew"},
+			},
+		},
+		VolumeMounts: openclawVols,
+		RootFs: &commonapi.ContainerRootfs{
+			Type: commonapi.CONTAINER_VOLUME_MOUNT_TYPE_DISK,
+			Disk: &commonapi.ContainerVolumeMountDisk{
+				Index:        &diskIndex,
+				SubDirectory: "rootfs",
+			},
+			Persistent: true,
+		},
+	}
+
+	return []*computeapi.PodContainerCreateInput{
+		{
+			Name:          fmt.Sprintf("%s-%d", llm.GetName(), 0),
+			ContainerSpec: openclawSpec,
+		},
+	}
+}
+
+func (c *openclaw) GetLLMUrl(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM) (string, error) {
+	return "", nil
+}
+
+func (c *openclaw) GetProbedInstantModelsExt(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, mdlIds ...string) (map[string]api.LLMInternalInstantMdlInfo, error) {
+	return nil, nil
+}
+
+func (c *openclaw) DetectModelPaths(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, pkgInfo api.LLMInternalInstantMdlInfo) ([]string, error) {
+	return nil, nil
+}
+
+func (c *openclaw) GetImageInternalPathMounts(sApp *models.SInstantModel) map[string]string {
+	return nil
+}
+
+func (c *openclaw) GetSaveDirectories(sApp *models.SInstantModel) (string, []string, error) {
+	return "", nil, nil
+}
+
+func (c *openclaw) ValidateMounts(mounts []string, mdlName string, mdlTag string) ([]string, error) {
+	return nil, nil
+}
+
+func (c *openclaw) CheckDuplicateMounts(errStr string, dupIndex int) string {
+	return "Duplicate mounts detected"
+}
+
+func (c *openclaw) GetInstantModelIdByPostOverlay(postOverlay *commonapi.ContainerVolumeMountDiskPostOverlay, mdlNameToId map[string]string) string {
+	return ""
+}
+
+func (c *openclaw) GetDirPostOverlay(dir api.LLMMountDirInfo) *commonapi.ContainerVolumeMountDiskPostOverlay {
+	return nil
+}
+
+func (c *openclaw) PreInstallModel(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, instMdl *models.SLLMInstantModel) error {
+	return nil
+}
+
+func (c *openclaw) InstallModel(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, dirs []string, mdlIds []string) error {
+	return nil
+}
+
+func (c *openclaw) UninstallModel(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, instMdl *models.SLLMInstantModel) error {
+	return nil
+}
+
+func (c *openclaw) DownloadModel(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, tmpDir string, modelName string, modelTag string) (string, []string, error) {
+	return "", nil, nil
+}

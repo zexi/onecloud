@@ -128,6 +128,12 @@ func (o *ollama) GetContainerSpec(ctx context.Context, llm *models.SLLM, image *
 	}
 }
 
+func (o *ollama) GetContainerSpecs(ctx context.Context, llm *models.SLLM, image *models.SLLMImage, sku *models.SLLMSku, props []string, devices []computeapi.SIsolatedDevice, diskId string) []*computeapi.PodContainerCreateInput {
+	return []*computeapi.PodContainerCreateInput{
+		o.GetContainerSpec(ctx, llm, image, sku, props, devices, diskId),
+	}
+}
+
 // func (o *ollama) PullModelByInstall(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, modelName string, modelTag string) error {
 // 	return nil
 // }

@@ -33,13 +33,11 @@ func GetLLMPodCreateInput(
 	}
 
 	lcd := llm.GetLLMContainerDriver()
-	llmContainer := lcd.GetContainerSpec(ctx, llm, llmImage, sku, nil, nil, "")
+	containers := lcd.GetContainerSpecs(ctx, llm, llmImage, sku, nil, nil, "")
 
 	data.Pod = &computeapi.PodCreateInput{
-		HostIPC: true,
-		Containers: []*computeapi.PodContainerCreateInput{
-			llmContainer,
-		},
+		HostIPC:    true,
+		Containers: containers,
 	}
 
 	return data, nil

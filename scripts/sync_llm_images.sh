@@ -13,23 +13,29 @@ if [ $# -ne 1 ]; then
 fi
 
 TARGET_REGISTRY="$1"
-SOURCE_REGISTRY="docker.io"
+SOURCE_REGISTRY="${SOURCE_REGISTRY:-docker.io}"
 
 # ----------------------------
 # 要同步的镜像列表
 # ----------------------------
 IMAGES=(
-  "nginx:latest"
-  "redis:6-alpine"
-  "postgres:15-alpine"
-  "langgenius/dify-api:1.7.2"
-  "langgenius/dify-sandbox:0.2.12"
-  "langgenius/dify-plugin-daemon:0.2.0-local"
-  "langgenius/dify-web:1.7.2"
-  "ubuntu/squid:latest"
-  "semitechnologies/weaviate:1.19.0"
-  "ollama/ollama:0.15.1"
-  "vllm/vllm-openai:v0.15.1"
+  # "nginx:latest"
+  # "redis:6-alpine"
+  # "postgres:15-alpine"
+  # "langgenius/dify-api:1.7.2"
+  # "langgenius/dify-sandbox:0.2.12"
+  # "langgenius/dify-plugin-daemon:0.2.0-local"
+  # "langgenius/dify-web:1.7.2"
+  # "ubuntu/squid:latest"
+  # "semitechnologies/weaviate:1.19.0"
+  # "ollama/ollama:0.15.1"
+  # "vllm/vllm-openai:v0.15.1"
+  # "yanwk/comfyui-boot:cu128-slim"
+  # "node:22-bookworm"
+  # "coollabsio/openclaw:latest"
+  # "coollabsio/openclaw-browser:latest"
+  # ghcr.io/coollabsio/openclaw-base:latest
+  lscr.io/linuxserver/webtop:ubuntu-xfce
 )
 
 for image in "${IMAGES[@]}"; do
@@ -44,7 +50,13 @@ for image in "${IMAGES[@]}"; do
 
   short_name="${name##*/}"  # 目标镜像只取最后一级名字
 
-  SRC="docker://${SOURCE_REGISTRY}/${name}:${tag}"
+  # 如果 name 已经包含 registry（例如 ghcr.io/xxx 或 localhost:5000/xxx），就不要再前缀 docker.io
+  first_component="${name%%/*}"
+  if [[ "$name" == */* ]] && { [[ "$first_component" == *.* ]] || [[ "$first_component" == *:* ]] || [[ "$first_component" == "localhost" ]]; }; then
+    SRC="docker://${name}:${tag}"
+  else
+    SRC="docker://${SOURCE_REGISTRY}/${name}:${tag}"
+  fi
   DST="docker://${TARGET_REGISTRY}/${short_name}:${tag}"
 
   echo
@@ -53,7 +65,7 @@ for image in "${IMAGES[@]}"; do
   echo "  Target: ${DST}"
   echo
 
-  skopeo copy --override-os linux --override-arch amd64 "${SRC}" "${DST}"
+  skopeo copy --override-os linux --multi-arch all "${SRC}" "${DST}"
 
   echo "Completed: ${short_name}:${tag}"
 done
