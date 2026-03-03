@@ -9,7 +9,7 @@ import (
 type LLMSkuListOptions struct {
 	options.BaseListOptions
 
-	LLMType string `json:"llm_type" choices:"ollama|vllm|comfyui"`
+	LLMType string `json:"llm_type" choices:"ollama|vllm|comfyui|openclaw"`
 }
 
 func (o *LLMSkuListOptions) Params() (jsonutils.JSONObject, error) {

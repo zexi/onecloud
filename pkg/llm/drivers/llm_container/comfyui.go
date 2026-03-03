@@ -2,6 +2,10 @@ package llm_container
 
 import (
 	"context"
+	"fmt"
+	"strings"
+
+	"yunion.io/x/pkg/errors"
 
 	commonapi "yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
@@ -139,7 +143,17 @@ func (c *comfyui) GetContainerSpecs(ctx context.Context, llm *models.SLLM, image
 }
 
 func (c *comfyui) GetLLMUrl(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM) (string, error) {
-	return "", nil
+	server, err := llm.GetServer(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get server")
+	}
+	// 从 IPs 字符串中选择第一个 IP
+	ips := strings.Split(strings.TrimSpace(server.IPs), ",")
+	if len(ips) == 0 || len(strings.TrimSpace(ips[0])) == 0 {
+		return "", errors.Error("server IPs is empty")
+	}
+	firstIP := strings.TrimSpace(ips[0])
+	return fmt.Sprintf("http://%s:%d", firstIP, 8188), nil
 }
 
 func (c *comfyui) GetProbedInstantModelsExt(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, mdlIds ...string) (map[string]api.LLMInternalInstantMdlInfo, error) {

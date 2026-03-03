@@ -3,6 +3,9 @@ package llm_container
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"yunion.io/x/pkg/errors"
 
 	commonapi "yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
@@ -150,7 +153,7 @@ func (c *openclaw) GetContainerSpecs(ctx context.Context, llm *models.SLLM, imag
 	openclawSpec := computeapi.ContainerSpec{
 		ContainerSpec: commonapi.ContainerSpec{
 			// Image:             image.ToContainerImage(),
-			Image:             "registry.cn-beijing.aliyuncs.com/zexi/openclaw:ubu-20260228.3",
+			Image:             "registry.cn-beijing.aliyuncs.com/zexi/openclaw:ubu-20260303.0",
 			ImageCredentialId: image.CredentialId,
 			EnableLxcfs:       true,
 			AlwaysRestart:     true,
@@ -176,8 +179,8 @@ func (c *openclaw) GetContainerSpecs(ctx context.Context, llm *models.SLLM, imag
 				{Key: "OPENCLAW_GATEWAY_TOKEN", Value: "abcd"},
 				{Key: "OPENCLAW_GATEWAY_PORT", Value: "18789"},
 				{Key: "OPENCLAW_GATEWAY_BIND", Value: "loopback"},
-				{Key: "OPENCLAW_STATE_DIR", Value: "/data/.openclaw"},
-				{Key: "OPENCLAW_WORKSPACE_DIR", Value: "/data/.openclaw/workspace"},
+				{Key: "OPENCLAW_STATE_DIR", Value: "/config/.openclaw"},
+				{Key: "OPENCLAW_WORKSPACE_DIR", Value: "/config/.openclaw/workspace"},
 				// Brew env
 				{Key: "HOMEBREW_PREFIX", Value: "/home/linuxbrew/.linuxbrew"},
 				{Key: "HOMEBREW_CELLAR", Value: "/home/linuxbrew/.linuxbrew/Cellar"},
@@ -204,7 +207,17 @@ func (c *openclaw) GetContainerSpecs(ctx context.Context, llm *models.SLLM, imag
 }
 
 func (c *openclaw) GetLLMUrl(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM) (string, error) {
-	return "", nil
+	server, err := llm.GetServer(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get server")
+	}
+	// 从 IPs 字符串中选择第一个 IP
+	ips := strings.Split(strings.TrimSpace(server.IPs), ",")
+	if len(ips) == 0 || len(strings.TrimSpace(ips[0])) == 0 {
+		return "", errors.Error("server IPs is empty")
+	}
+	firstIP := strings.TrimSpace(ips[0])
+	return fmt.Sprintf("http://%s:%d", firstIP, 3001), nil
 }
 
 func (c *openclaw) GetProbedInstantModelsExt(ctx context.Context, userCred mcclient.TokenCredential, llm *models.SLLM, mdlIds ...string) (map[string]api.LLMInternalInstantMdlInfo, error) {
