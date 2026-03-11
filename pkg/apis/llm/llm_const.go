@@ -33,15 +33,25 @@ const (
 	/* 运行 */
 	LLM_STATUS_RUNNING = "running"
 
+	/* 开始重启 */
+	LLM_STATUS_START_RESTART = "start_restart"
+	/* 正在重启 */
+	LLM_STATUS_RESTARTING = "restarting"
+	/* 重启失败 */
+	LLM_STATUS_RESTART_FAILED = "restart_fail"
+
+	/* 开始删除 */
+	LLM_STATUS_START_DELETE = "start_delete"
+	/* 正在删除 */
+	LLM_STATUS_DELETING = "deleting"
+	/* 删除失败 */
+	LLM_STATUS_DELETE_FAILED = "delete_fail"
+
 	/* 删除 */
 	LLM_STATUS_DELETED = "deleted"
 
 	LLM_LLM_STATUS_NO_SERVER    = "no_server"
 	LLM_LLM_STATUS_NO_CONTAINER = "no_container"
-
-	LLM_STATUS_START_DELETE  = "start_delete"
-	LLM_STATUS_DELETING      = "deleting"
-	LLM_STATUS_DELETE_FAILED = "delete_fail"
 )
 
 type TQuickModelMethod string

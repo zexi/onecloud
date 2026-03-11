@@ -80,6 +80,19 @@ func (volume *SVolume) RealDelete(ctx context.Context, userCred mcclient.TokenCr
 	return volume.SVirtualResourceBase.Delete(ctx, userCred)
 }
 
+func (volume *SVolume) StartResizeTask(ctx context.Context, userCred mcclient.TokenCredential, input api.VolumeResizeTaskInput, parentTaskId string) (*taskman.STask, error) {
+	volume.SetStatus(ctx, userCred, computeapi.DISK_START_RESIZE, "StartResizeTask")
+	params := jsonutils.Marshal(input).(*jsonutils.JSONDict)
+	task, err := taskman.TaskManager.NewTask(ctx, "VolumeResizeTask", volume, userCred, params, parentTaskId, "", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "NewTask")
+	}
+	if err := task.ScheduleRun(nil); err != nil {
+		return nil, errors.Wrap(err, "ScheduleRun")
+	}
+	return task, nil
+}
+
 func fetchImage(ctx context.Context, userCred mcclient.TokenCredential, imageId string) (*imageapi.ImageDetails, error) {
 	s := auth.GetSession(ctx, userCred, options.Options.Region)
 	imgObj, err := image.Images.Get(s, imageId, nil)

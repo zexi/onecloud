@@ -15,8 +15,11 @@ import (
 	commonapi "yunion.io/x/onecloud/pkg/apis"
 	computeapi "yunion.io/x/onecloud/pkg/apis/compute"
 	api "yunion.io/x/onecloud/pkg/apis/llm"
+	"yunion.io/x/onecloud/pkg/apis/notify"
+	notifyapi "yunion.io/x/onecloud/pkg/apis/notify"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
+	"yunion.io/x/onecloud/pkg/cloudcommon/notifyclient"
 	"yunion.io/x/onecloud/pkg/httperrors"
 	"yunion.io/x/onecloud/pkg/llm/options"
 	llmutils "yunion.io/x/onecloud/pkg/llm/utils"
@@ -502,6 +505,96 @@ func (llm *SLLM) PerformStop(ctx context.Context, userCred mcclient.TokenCredent
 		return nil, errors.Wrap(err, "StartStopTask")
 	}
 	return nil, nil
+}
+
+func (llm *SLLM) ValidateRestartInput(ctx context.Context, userCred mcclient.TokenCredential, input *api.LLMRestartInput) (*api.LLMRestartTaskInput, error) {
+	if len(llm.CmpId) == 0 {
+		return nil, errors.Wrap(errors.ErrInvalidStatus, "empty cmp_id")
+	}
+
+	srv, err := llm.GetServer(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetServer")
+	}
+
+	if (llm.Status != api.LLM_STATUS_READY && llm.Status != api.LLM_STATUS_RUNNING) || (srv.Status != computeapi.VM_READY && !utils.IsInArray(srv.Status, computeapi.VM_RUNNING_STATUS)) {
+		return nil, errors.Wrapf(errors.ErrInvalidStatus, "invalid llm status %s", llm.Status)
+	}
+
+	return &api.LLMRestartTaskInput{}, nil
+}
+
+func (llm *SLLM) PerformRestart(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, input *api.LLMRestartInput) (jsonutils.JSONObject, error) {
+	taskInput, err := llm.ValidateRestartInput(ctx, userCred, input)
+	if err != nil {
+		return nil, errors.Wrap(err, "ValidateRestartInput")
+	}
+	_, err = llm.StartRestartTask(ctx, userCred, taskInput, "")
+	if err != nil {
+		return nil, errors.Wrap(err, "StartRestartTask")
+	}
+	return nil, nil
+}
+
+func (llm *SLLM) StartRestartTask(ctx context.Context, userCred mcclient.TokenCredential, params *api.LLMRestartTaskInput, parentTaskId string) (*taskman.STask, error) {
+	key := "perform_restart"
+	if params.ResetDataDisk {
+		key = "perform_reset"
+	}
+	llm.SetStatus(ctx, userCred, api.LLM_STATUS_START_RESTART, key)
+	taskName := "LLMRestartTask"
+	if params.ResetDataDisk {
+		taskName = "LLMResetTask"
+	}
+	params.LLMId = llm.Id
+	task, err := taskman.TaskManager.NewTask(ctx, taskName, llm, userCred, jsonutils.Marshal(params).(*jsonutils.JSONDict), parentTaskId, "", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "NewTask")
+	}
+	if err := task.ScheduleRun(nil); err != nil {
+		return nil, errors.Wrap(err, "ScheduleRun")
+	}
+	return task, nil
+}
+
+func (llm *SLLM) PerformReset(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, input *api.LLMRestartInput) (jsonutils.JSONObject, error) {
+	taskInput, err := llm.ValidateRestartInput(ctx, userCred, input)
+	if err != nil {
+		return nil, errors.Wrap(err, "ValidateRestartInput")
+	}
+	_, err = llm.StartResetTask(ctx, userCred, taskInput, "")
+	if err != nil {
+		return nil, errors.Wrap(err, "StartRestartTask")
+	}
+	return nil, nil
+}
+
+func (llm *SLLM) StartResetTask(ctx context.Context, userCred mcclient.TokenCredential, params *api.LLMRestartTaskInput, parentTaskId string) (*taskman.STask, error) {
+	llm.SetStatus(ctx, userCred, api.LLM_STATUS_START_RESTART, "perform_reset")
+	task, err := taskman.TaskManager.NewTask(ctx, "LLMResetTask", llm, userCred, jsonutils.Marshal(params).(*jsonutils.JSONDict), parentTaskId, "", nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "NewTask")
+	}
+	if err := task.ScheduleRun(nil); err != nil {
+		return nil, errors.Wrap(err, "ScheduleRun")
+	}
+	return task, nil
+}
+
+func (llm *SLLM) NotifyRequest(ctx context.Context, userCred mcclient.TokenCredential, action notify.SAction, model jsonutils.JSONObject, success bool) {
+	obj := func(ctx context.Context, details *jsonutils.JSONDict) {}
+	if model != nil {
+		obj = func(ctx context.Context, details *jsonutils.JSONDict) {
+			details.Set("customize_details", model)
+		}
+	}
+	notifyclient.EventNotify(ctx, userCred, notifyclient.SEventNotifyParam{
+		Obj:                 llm,
+		Action:              action,
+		ObjDetailsDecorator: obj,
+		IsFail:              !success,
+		ResourceType:        notifyapi.TOPIC_RESOURCE_LLM,
+	})
 }
 
 func (llm *SLLM) StartLLMStopTask(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error {
